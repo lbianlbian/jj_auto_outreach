@@ -1,0 +1,24 @@
+# JJ auto outreach project
+This is a repo housing the documentation, tests, and code for a project for CS 146S at Stanford. The project aims to automate lead sourcing and outreach and basic historical tracking for a small business. 
+
+## Business context
+See docs/proposal.md and docs/technical_spec.md note that infrastructure related content in there is now out of date
+
+## Ingestion
+Using the shovels.ai API, the code here finds the emails of 10 electricians who recently filed an electric permit and have not already been found. Saved in leads.json, will be switching to a leads sheet
+
+## Send email (coming soon)
+New directory would handle this, Uses a template that can also be edited by a human. 
+
+## Tracking (coming soon)
+Code for tracking emails that have been sent and for updating emails as responded. Also planning some sort of kill switch for everything if someone responds or to pull at my discretion to update the system with new learnings. 
+
+clasp which is google apps script's cli will be used for development
+
+Switching infrastructure from original render.com plan to google apps script native:
+- existence of clasp makes it possible to develop and deploy with agentic tools
+- render.com cron jobs cost money
+- GAS approach makes simplicity and usability by non technical business owner easier
+- for course, practicing google apps script development with agentic tools when i previously never used agentic tools with GAS is good
+
+next step before send email though is to set linear mcp up and then break the whole plan down into tasks because that's a requirement for the project and also would be organized
