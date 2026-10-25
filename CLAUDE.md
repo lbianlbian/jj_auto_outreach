@@ -10,13 +10,15 @@ fixtures replies. It doesn't try to cover every contractor.
 - `README.md` is the human-readable version, maintained by the user. **Don't edit it**
   unless asked. If it disagrees with this file, `README.md` wins. Tell the user about the
   drift instead of guessing.
-- `proposal.md` and `technical_spec.md` were written before any work started. Use them
-  for business context and for what each stage should do. Two parts are superseded:
+- `docs/proposal.md` and `docs/technical_spec.md` were written before any work started.
+  Use them for business context and for what each stage should do. Two parts are superseded:
   their "LLM writes each email" step, and their infrastructure (Render.com cron,
   Postgres, a separate dashboard). See Decisions. Where research changes something else,
   the user will say so.
-- `ingestion/README.md` is the detailed reference for the Shovels API, credits, data lag
+- `ingestion/CLAUDE.md` is the detailed reference for the Shovels API, credits, data lag
   and lead filters. Read it before touching ingestion in either language.
+- `docs/plan.md` is the human-written task plan that gets turned into Linear tasks. Don't
+  edit it unless asked. Suggesting tasks to add, change or remove is welcome.
 
 ## Status
 
@@ -28,8 +30,8 @@ fixtures replies. It doesn't try to cover every contractor.
 | Scheduling | Not started | Apps Script time-based triggers |
 
 **Next step, before any send-email work:** set up the Linear MCP server and break the
-whole plan into Linear tasks (a course requirement). Don't start building the send stage
-until the user says the task breakdown is done.
+whole plan into Linear tasks (a course requirement), using `docs/plan.md`. Don't start
+building the send stage until the user says the task breakdown is done.
 
 ## Decisions (don't re-litigate)
 - **Everything runs in Google Apps Script (GAS), developed locally with `clasp`.** This
@@ -52,7 +54,7 @@ until the user says the task breakdown is done.
   buy light fixtures?" check, e.g. to drop fire-alarm and sprinkler companies, which
   pass the electrical classification filter today. Not implemented.
 - **Never ship to Alaska or Hawaii.** This is enforced in `ingestion/` in three places
-  (see `ingestion/README.md`). The JS port must keep all three, with tests, and no new
+  (see `ingestion/CLAUDE.md`). The JS port must keep all three, with tests, and no new
   stage may undo it.
 
 ## Commands
@@ -100,7 +102,8 @@ before relying on the names above.
   must check a shared secret from Script Properties in the request body.
 - `ingestion/seen_contractors.json` and `ingestion/search_log.json` are written by the
   script. Don't hand-edit them. `ingestion/blocklist.json` is hand-maintained, so add
-  bad domains and companies there (and to the blocklist tab once it exists).
+  bad domains and companies there (and to the blocklist tab once it exists). All JSON
+  files are gitignored on purpose: they're local state that is moving to Sheets.
 - In Python, read and write JSON state only through `ingestion/store.py`. In GAS, keep
   all Sheet access in one store module the same way, so the rest of the code doesn't
   know where data lives.
@@ -113,6 +116,7 @@ before relying on the names above.
 
 ## Layout
 ```
+docs/                 proposal.md, technical_spec.md, plan.md (see Ownership of docs)
 ingestion/            Python Shovels -> leads (shovels.py CLI, client.py, leads.py, filters.py, store.py)
 leads.json            latest Python run's output: name, email, phone, state, permit_date, full contractor record
 shovels_executable/   vendored Shovels CLI binary and its README
