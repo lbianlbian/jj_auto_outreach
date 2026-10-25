@@ -21,4 +21,4 @@ Switching infrastructure from original render.com plan to google apps script nat
 - GAS approach makes simplicity and usability by non technical business owner easier
 - for course, practicing google apps script development with agentic tools when i previously never used agentic tools with GAS is good
 
-next step before send email though is to set linear mcp up and then break the whole plan down into tasks because that's a requirement for the project and also would be organized
+#### Tasks/progress are tracked in Linear and Linear should be updated as things are done or new things to do are added. 

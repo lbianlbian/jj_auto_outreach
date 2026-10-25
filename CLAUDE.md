@@ -29,9 +29,30 @@ fixtures replies. It doesn't try to cover every contractor.
 | Tracking | Not started | Apps Script + Google Sheet. Records sent emails and marks replies. Also a kill switch that stops everything when someone replies, or when the user pulls it to apply what they've learned |
 | Scheduling | Not started | Apps Script time-based triggers |
 
-**Next step, before any send-email work:** set up the Linear MCP server and break the
-whole plan into Linear tasks (a course requirement), using `docs/plan.md`. Don't start
-building the send stage until the user says the task breakdown is done.
+**Next step:** set up clasp and the Apps Script project (Linear JJ-10). Linear has the
+current task list and order. See Linear below.
+
+## Linear (task tracking)
+Tasks live in the Linear project **JJ auto outreach** (team `JJ`), reached through the
+`linear-server` MCP. Using it is a course requirement, so Linear must not drift from the
+repo.
+
+- **Use it to get your bearings.** At the start of a task, or whenever you're unsure what's
+  done, what's next or why something is scoped the way it is, list the project's issues.
+  Each issue description has the scope, constraints and "done when" for that piece of work,
+  and blocked-by relations show the order. If Linear and the code disagree, trust the code
+  and tell the user.
+- **End every task by suggesting Linear updates.** As the last step, list the changes
+  your work implies: status moves (Todo → In Progress → Done), new issues you discovered,
+  issues to edit (scope, description, dependencies), and issues to cancel or remove. Give
+  the issue IDs. Apply them once the user agrees. Never delete an issue without asking;
+  prefer Canceled.
+- **New issues** get a title, a description (scope, constraints, "done when"), a status,
+  a priority (High/Medium/Low), the `JJ auto outreach` project and blocked-by relations
+  where they apply. Match the style of the existing issues.
+- **Remind the user to update `docs/plan.md`** whenever a Linear change adds, finishes,
+  renames or removes a task. That file is theirs to edit, so don't change it yourself.
+  Say which lines need to change.
 
 ## Decisions (don't re-litigate)
 - **Everything runs in Google Apps Script (GAS), developed locally with `clasp`.** This
@@ -42,6 +63,8 @@ building the send stage until the user says the task breakdown is done.
   self-hosted MCP server for Apps Script.
 - **Google Sheets is the datastore and the dashboard.** Leads, sent emails, replies,
   seen contractors, the search log, the blocklist and the kill switch live in Sheet tabs.
+  The Sheet also powers a simple HTML dashboard served by the Apps Script web app. Both
+  views stay available: the Sheet for raw data and editing, the HTML page for a summary.
 - **Ingestion gets ported from Python to JS, tests first.** Port the pytest suite to JS
   (run with Node, offline), then port the code until it passes. Keep the Python code as
   the reference until the user says the JS version replaces it.
