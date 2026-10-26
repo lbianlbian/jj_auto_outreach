@@ -1,31 +1,31 @@
 # Ingestion: Shovels.ai → contractor leads
 
-`python -m ingestion.shovels` is the first step of the outreach cron job. It searches the
-Shovels API for electrical contractors who filed a permit on a recent day, filters them
-and outputs up to 10 leads per run. Each lead has a name, a primary email, the state and
-the day of the permit, and the full contractor record.
+`runIngestion()` (in `gas/src/main.js`) is the first step of the outreach pipeline. It
+searches the Shovels API for electrical contractors who filed a permit on a recent day,
+filters them and writes at least 10 new leads per run to the leads tab of the Sheet. Each
+lead in memory has a name, primary email, phone, city, state, permit day, project type
+(from `tag_tally`) and the full contractor record. Only `contractor_id, emailed_at, name,
+email` are written to the Sheet; the rest is there for the send step's template.
 
-```
-python -m ingestion.shovels --out leads.json            # default: all states, 10 leads
-python -m ingestion.shovels --states CA TX --max-leads 5 --out leads.json
-```
+`runIngestion()` spends credits. Run it from the Apps Script editor only with the user's
+approval. It reads `SHOVELS_API_KEY` from Script Properties.
 
-The script reads `SHOVELS_API_KEY` from `.env` in the project root.
-
-| File | Purpose |
+| File (`gas/src/`) | Purpose |
 |---|---|
-| `shovels.py` | CLI entry point: parses args, loads state, runs `fetch_leads`, saves state |
-| `client.py` | `ShovelsClient`: HTTP, retries, pagination and credit tracking |
-| `leads.py` | `fetch_leads()`: picking days, state rotation and the credit-saving search loop |
-| `filters.py` | `Blocklist` and `skip_reason()`: which contractors count as leads |
-| `store.py` | Loading and saving the three JSON files below |
-| `blocklist.json` | Big companies and email domains to never pitch |
-| `seen_contractors.json` | Every contractor already fetched, with its outcome (written by the script) |
-| `search_log.json` | Per state: days already searched within the lookback, and the date last searched (written by the script) |
+| `main.js` | Entry points: `setup()`, `runIngestion()`, and the `UrlFetchApp` adapter |
+| `client.js` | `ShovelsClient`: HTTP, retries, one page of contractor search, coverage counts, credit tracking |
+| `leads.js` | `fetchLeads()`: picking days, state rotation and the credit-saving search loop. Also `US_STATES` |
+| `filters.js` | `Blocklist` and `skipReason()`: which contractors count as leads |
+| `store.js` | Reading and writing the leads, search_log and blocklist tabs |
+| `schema.js`, `setup.js` | The tabs and columns, and `setupSheets()`, which creates them idempotently |
 
-The three JSON files are read only through `load_blocklist()`, `load_seen()`/`save_seen()`
-and `load_search_log()`/`save_search_log()` in `store.py`. To move them into Postgres
-later, only that module needs to change.
+| Tab | Written by | Holds |
+|---|---|---|
+| `leads` | the script | Every lead found. Also the do-not-contact-again list, by `contractor_id` and email |
+| `search_log` | the script | Per state, the days already searched as inclusive ranges, and `searched_at` for rotation |
+| `blocklist` | the user, by hand | Big companies and email domains to never pitch |
+
+Only `store.js` touches the Sheet, and it finds columns by header name.
 
 ---
 
@@ -44,16 +44,16 @@ Shovels adds late. Design choices below lean on this.
 ## No Alaska or Hawaii
 
 **JoJoSpring can't ship to Alaska or Hawaii, so contractors there are never leads.** This
-is enforced in three places:
+is enforced in three places, each with a test:
 
-- `US_STATES` in `shovels.py`, the default `--states`, leaves out `AK` and `HI`.
-- `fetch_leads()` drops `filters.UNSHIPPABLE_STATES` from any state list it's given, even
-  `--states AK`, before making any call. That includes the free coverage calls.
-- `skip_reason()` rejects a contractor whose own `address.state` is `AK` or `HI`
+- `US_STATES` in `leads.js`, the state list `runIngestion()` passes, leaves out `AK` and `HI`.
+- `fetchLeads()` drops `UNSHIPPABLE_STATES` from any state list it's given, even `['AK']`,
+  before making any call. That includes the free coverage calls.
+- `skipReason()` rejects a contractor whose own `address.state` is `AK` or `HI`
   (status `"unshippable state"`). Permits are searched by where the work was done, but
   we'd ship to the contractor's address.
 
-To change the list, edit `UNSHIPPABLE_STATES` in `filters.py`.
+To change the list, edit `UNSHIPPABLE_STATES` in `filters.js`.
 
 ---
 
@@ -68,24 +68,24 @@ Everything below was confirmed with live calls in October 2026, except where mar
 - **Base URL:** `https://api.shovels.ai/v2`
 - **Auth:** the header `X-API-Key: <key>`
 - **List parameters are sent as repeated keys:** for example `permit_tags=electrical&permit_tags=solar`
-  or `id=C1&id=C2`. The `requests` library does this when you pass a Python list.
+  or `id=C1&id=C2`. `toQuery_()` in `client.js` does this for array values.
 - **Raw response shape:**
   `{"items": [...], "size": N, "next_cursor": "..." | null, "total_count": ...}`.
   The CLI rewraps this as `{"data", "meta"}`, but the raw API does not.
 - **Pagination:** send `cursor=<next_cursor>` to get the next page. `next_cursor` is
   `null` on the last page. Changing `size` between pages works.
 - **`size` must be at least 1.** `size=0` returns a 422 error, so there's no free
-  count-only query.
+  count-only query. The client refuses a size below 1 before sending.
 - **`include_count=true`** returns `total_count: {"value": N, "relation": "eq"|"gte"}`.
   The count is capped at 10,000.
-- **Sorting:** results come newest `file_date` first, and the API has no option to
+- **Sorting:** permit results come newest `file_date` first, and the API has no option to
   change the order.
 
-### Endpoints used
+### Endpoints
 
 | Endpoint | Use | Notes |
 |---|---|---|
-| `GET /permits/search` | Recent electrical permits (old flow, no longer used) | Required: `geo_id`, `permit_from`, `permit_to`. We also send `permit_tags=electrical` and `permit_has_contractor=true` |
+| `GET /permits/search` | Recent electrical permits (old flow, no longer used) | Required: `geo_id`, `permit_from`, `permit_to`. We also sent `permit_tags=electrical` and `permit_has_contractor=true` |
 | `GET /contractors?id=...` | Contractor details and emails (old flow, no longer used) | 1–50 IDs per call. Unknown IDs are left out of `items`. Same raw response shape |
 | `GET /contractors/search` | **Used.** Contractors directly (see [how a run works](#how-a-run-works-contractor-search)) | Takes the same `geo_id` / date / `permit_tags` filters. Returns full contractor records, sorted by `id` |
 | `GET /contractors/{id}/permits` | One contractor's permits | Not used yet |
@@ -105,7 +105,9 @@ Everything below was confirmed with live calls in October 2026, except where mar
 - **Unknown parameters are silently ignored.** The CLI flag `--contractor-classification`
   is sent to the API as `contractor_classification_derived`. Sending
   `contractor_classification` returned unfiltered results with no error and still cost
-  credits. Run `--dry-run` to get the real parameter names before a paid call.
+  credits. Run `--dry-run` to get the real parameter names before a paid call. On
+  2026-10-26 the JS client's request matched `shovels.exe contractors search --dry-run`
+  exactly.
 
 ### Contractor fields that matter
 - **`primary_email`:** a single string. This is the one we use.
@@ -128,7 +130,7 @@ response with no records costs nothing and has no credit headers.
 - A page of N permits costs N.
 - A contractor lookup costs 1 per contractor returned.
 - **Our account has a 500-credit limit.** About 410 went on exploration and testing in
-  one day, leaving 89. Testing `/contractors/search` used 15 more, leaving 74.
+  one day. On 2026-10-26, before the first Apps Script run, 52 were left.
 - **The limit looks like a rolling 30 days.** `GET /usage` (free) lists credits per day,
   each with an `expires` date 30 days later. For example, the 411 used on 2026-10-21
   expire on 2026-11-20. This is inferred from the response, not confirmed with Shovels.
@@ -157,16 +159,26 @@ Measured runs of the old flow (10 leads each):
 contractors, because active contractors file many permits and every one is paid for.
 `/contractors/search` returns each contractor once, so it removes that cost.
 
-### Cost controls in `leads.py`
+### Cost controls in `leads.js`
 - **Adaptive page size:** each page asks for at most the number of leads still needed.
   Even if every contractor on the page becomes a lead, the run stops at the end of the
   page, so no contractor is paid for and then left unused. `PAGE_SIZE = 25` is the upper limit.
-- **Each (state, day) is searched at most once,** so no run pays to re-read a day.
+- **Every lead on a paid page is kept.** `targetLeads` is a minimum, not a cap: if a page
+  ever holds more good leads than needed, all of them are written.
+- **Each (state, day) is searched at most once,** so no run pays to re-read a day. A day
+  is marked searched before it's fetched, so a failure partway doesn't cause a re-read.
 - **Finding the starting day is free:** it uses the coverage endpoint, and empty days cost nothing anyway.
-- **`--max-contractors`** (default 50) is a safety cap on contractors fetched, and so on
-  credits, per run.
-- **The seen file** records every contractor fetched, including rejected ones. A seen
-  contractor that turns up again on another day still costs 1 credit, but it's skipped.
+- **`maxContractors`** (50 in `runIngestion()`) is a safety cap on contractors fetched,
+  and so on credits, per run.
+- **Saved on failure:** if a run throws partway, the leads found so far and the search
+  log are still written, so nothing paid for is lost.
+
+### Why there's no seen-contractors list
+The Python version kept a file of every contractor fetched, including rejected ones. It
+saved no credits: a contractor that turns up again is billed before we can skip it. So
+the Apps Script version keeps only the leads tab. A contractor already there (by id or
+email) is skipped as `"already a lead"`. A rejected contractor isn't stored and is just
+filtered again for free, so a blocklist edit takes effect on the next run.
 
 ---
 
@@ -208,16 +220,22 @@ goes away.
 ```
 contractors/search (state, one day, permit_tags=electrical,       1 credit per contractor
                     contractor_classification_derived=electrical)
-  -> filter: seen file, blocklist, permit_count, email            free
+  -> filter: leads tab, blocklist, permit_count, email             free
   -> optional: /contractors/{id}/permits size=1                    +1 credit per lead, gives a recent job to mention
 ```
 
-**Measured:** the first live run (2026-10-21, default states, 10 leads) cost **22 credits**,
-against 70–90 for the old flow. It fetched 22 contractors: 10 leads, 7 seen in earlier
-runs, 4 with no primary email and 1 duplicate email.
+**Measured runs:**
+
+| Run | Contractors (credits) | Leads | Skipped |
+|---|---|---|---|
+| Python, 2026-10-21, default states | 22 | 10 | 7 seen in earlier runs, 4 no primary email, 1 duplicate email |
+| Apps Script, 2026-10-26, empty Sheet | 17 | 10 | 3 no primary email, 2 already a lead, 2 too large |
+
+The old flow cost 70–90 credits for 10 leads. In the Apps Script run, "already a lead"
+means the same contractor came back on a second day within the run.
 
 **Sparse states use up their lookback quickly.** With both electrical filters, AL, AZ and
-AR returned only 0–2 contractors a day, so that run searched every day from Oct 11 back to
+AR returned only 0–2 contractors a day, so the first Python run searched every day from Oct 11 back to
 Sep 21 in all three, plus one CA day. Empty days are free, so this costs no extra credits,
 but those states give nothing more until new days arrive. AZ looked especially thin
 compared with the old flow, which found 29 AZ contractors from 41 permits. Maybe many AZ
@@ -245,14 +263,15 @@ contractor records would have replaced 72 permits plus 15 lookups.
 Following the [core tenet](#core-tenet-a-steady-supply-not-full-coverage), **each
 (state, day) is searched at most once.** Each run:
 
-1. Picks states least recently searched first. A state with no data still gets
-   `last_searched` stamped, so it rotates to the back. With 10 leads a run, one state
-   usually fills the run, which also spreads leads across the country.
+1. Picks states least recently searched first (`searched_at` in the search_log tab). A
+   state with no data still gets a row with blank start/end and `searched_at` stamped,
+   so it rotates to the back. With 10 leads a run, one state usually fills the run,
+   which also spreads leads across the country.
 2. Uses free coverage calls to find the state's newest day with any permits, within the
-   `--days` lookback (default 30). That day is treated as partial and skipped.
+   lookback (`days`, default 30). That day is treated as partial and skipped.
 3. Walks backward from the day before, skipping days already searched for that state.
-4. Pages through each day with `next_cursor` until 10 leads pass the filters, marking
-   the day searched. Days older than the lookback are dropped from `search_log.json`.
+4. Pages through each day with `next_cursor` until at least 10 leads pass the filters,
+   marking the day searched. Days older than the lookback are dropped from the search log.
 
 - **Empty days cost nothing.** A response with no records is free, so days Shovels hasn't
   ingested yet are just stepped past. That makes the irregular ~9-day lag harmless. A
@@ -265,8 +284,9 @@ Following the [core tenet](#core-tenet-a-steady-supply-not-full-coverage), **eac
 - **The cursor isn't stored between runs.** Days are never searched twice, so no run
   re-reads contractors an earlier run already paid for. When a run stops partway through
   a day, the rest of that day is abandoned.
-- **What is stored:** the days already searched per state, in `search_log.json`, plus the seen file. The same contractor files on many days, so repeats still
-  come back. They cost 1 credit each and get skipped.
+- **What is stored:** the days already searched per state (as ranges in the search_log
+  tab) and the leads tab. The same contractor files on many days, so repeats still come
+  back. They cost 1 credit each and get skipped.
 
 ### Free completeness check
 `GET /meta/coverage?geo_id=CA&geo_type=state&date_from=D&date_to=D` (CLI:
@@ -298,32 +318,39 @@ WY  Oct 5-9: 41, 28, 26, 17, 11              Oct 10-12: 0
   filled on weekends and on Oct 12, so the window seems to use another or combined date.
   The totals still track the electrical counts, so it works as a signal.
 
-**`leads.py` uses this to pick the starting day** (`_newest_day_with_data()`). It walks
+**`leads.js` uses this to pick the starting day** (`newestDayWithData()`). It walks
 backward with free coverage calls to the newest day with `permits_total > 0`, treats that
-day as partial and starts the paid search the day before. In both CA and TX this starts on
+day as partial and starts the paid search the day before. In both CA and TX this started on
 Fri Oct 9. Not done yet: skipping days far below a state's normal weekday count.
+
+Apps Script stops a run after 6 minutes. A state with no data in the lookback costs
+about 31 free coverage calls, so a run that meets many empty states could get close to
+that limit. Call latency from Apps Script hasn't been measured.
 
 ---
 
 ## Lead quality
 
-What the filters in `filters.skip_reason()` do:
+What `skipReason()` in `filters.js` does:
 - **Unshippable state:** the contractor's `address.state` is in `UNSHIPPABLE_STATES`
   (see [No Alaska or Hawaii](#no-alaska-or-hawaii)).
 - **`permit_count` > 500 is too large.** Tesla has about 75k, NRG Clean Power about 4.4k.
   Small shops have 1–200.
 - **Blocklisted company:** whole-word matching on `business_name`, `name` and `dba`
-  against `blocklist.json` `companies`. Matching ignores case and punctuation, so
+  against the blocklist tab's `company` column. Matching ignores case and punctuation, so
   "Sunrun Inc." is blocked but "Sunrunner Electric" isn't.
 - **No primary email**, or a **blocked email**, meaning:
-  - a domain in `blocklist.json` `email_domains`,
+  - a domain in the blocklist tab's `email_domain` column,
   - any `.gov` domain, because those are permit offices and agencies, not contractors, or
   - a junk name like `no@`, `none@` or `test@`.
-- **Duplicate email:** another contractor, in this run or an earlier one, already has it.
+
+`fetchLeads()` adds two more:
+- **Already a lead:** the `contractor_id` is in the leads tab or was found earlier in the run.
+- **Duplicate email:** another lead, in the leads tab or this run, already has the email.
 
 Things we learned:
 - **Even `primary_email` can be a permit-service company's address**, for example
-  `north@ipermitca.com` on several contractors. Add those domains to `email_domains`.
+  `north@ipermitca.com` on several contractors. Add those domains to the blocklist tab.
 - **Large firms can have small `permit_count` values.** This happened with Sunrun (43),
   PCL (3) and Sundt (399), probably because their permits are split across many license
   records. The blocklist catches them.
@@ -334,50 +361,50 @@ Things we learned:
   classification is null (Surgeon Electric was one).
 - About a quarter to a third of contractors looked up had no usable primary email.
 - **Permit offices with non-`.gov` domains get through.** Jefferson County, AL uses
-  `epermitjc_registration@jccal.org`. Add such domains to `email_domains` as they appear.
+  `epermitjc_registration@jccal.org`. Add such domains to the blocklist tab as they appear.
 
 Deliberately **not** filtered:
 - **Fire-alarm and fire-protection companies.** They show up under the electrical
-  classification. Telling them apart from electricians would take an LLM step, and a name
-  filter on "fire" could drop a legitimate electrician with "fire" in the company name.
-  They're accepted as leads.
+  classification. Telling them apart from electricians would take an LLM step (JJ-17),
+  and a name filter on "fire" could drop a legitimate electrician with "fire" in the
+  company name. They're accepted as leads.
 - **Role addresses** like `accounting@` or `licensing@`. They're less likely to reach the
   owner, but they're real company inboxes, so they're accepted too.
 
 ---
 
 ## Open issues / TODOs
-- [x] Switch to `/contractors/search`, starting each state the day before its newest day with data.
-- [x] Do a live run and measure credits per lead: 22 credits for 10 leads.
 - [ ] Check whether the classification filter is too strict in states like AZ.
 - [ ] Measure how many real electricians `contractor_classification_derived=electrical` drops.
-- [ ] **"Seen" means fetched, not emailed.** If the email step fails, that contractor is
-      never returned again. When this moves to Postgres, track `emailed_at` separately.
-- [ ] Move the seen file, search log and blocklist to Postgres (only `store.py`
-      changes).
-- [ ] **Credits:** the account has a 500 limit and 74 are left after testing. A daily run
-      at about 70–90 credits needed a paid plan. Contractor search should fit about 15–30 a day.
+- [ ] Credit guard before any ingestion trigger: check free `GET /usage`, skip below a
+      threshold, honor the kill switch, log every spend to a Sheet tab (see CLAUDE.md).
 - [ ] Re-measure the data lag on other days, to confirm older days really don't change.
       The coverage check makes this free: log each state's daily `permits_total` per run.
-- [ ] Keep growing `blocklist.json` as bad leads appear.
-- [x] Move the mock tests into the repo (`tests/test_ingestion.py`).
+- [ ] Keep growing the blocklist tab as bad leads appear.
+- [ ] Log each skipped contractor (id, name, reason), not just counts, to make runs easier to audit.
 
 ## Testing
 ```
-python -m pytest
+cd gas && npm test
 ```
-`tests/test_ingestion.py` replaces `ShovelsClient._get` with a fake API, so the tests make
-no network calls and use no credits. The fake serves `/contractors/search` sorted by id
-with a keyset cursor and the classification filter, serves `/meta/coverage` counts, and
-bills 1 credit per contractor returned, the way the real API does. The tests cover:
+`gas/test/ingestion.test.js` passes a fake Shovels API (`FakeShovels` in `fakes.js`)
+into `ShovelsClient` at the HTTP level, so the tests make no network calls and use no
+credits. The fake serves `/contractors/search` sorted by id with a keyset cursor and the
+classification filter, serves `/meta/coverage` counts, and bills 1 credit per contractor
+returned, the way the real API does. The tests cover:
 - skipping the newest, partial day, and moving the start when a new batch lands
 - each (state, day) being searched only once, and old days being dropped from the log
 - walking back across days until leads are full
 - rotation, including states with no data
-- no paid-for contractor going unused, and the `--max-contractors` cap
-- the exact classification parameter name, which the real API would silently ignore if misspelled
+- no paid-for contractor going unused, every lead on a paid page being kept, and the
+  `maxContractors` cap
+- the exact parameter names and repeated-key encoding, which the real API would silently
+  ignore if wrong
 - every skip reason, and Alaska and Hawaii never being searched or kept
-- blocklist matching
+- blocklist matching, retries, and leads surviving a failure partway through a run
 
-When you change how `fetch_leads` pages through results, check `test_no_paid_contractor_goes_unused`.
-It catches credit waste.
+`gas/test/sheets.test.js` covers `setupSheets()` and the store against a fake
+SpreadsheetApp, including a two-run flow through the Sheet.
+
+When you change how `fetchLeads` pages through results, check `no paid contractor goes
+unused`. It catches credit waste.

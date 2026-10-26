@@ -1,6 +1,6 @@
 /**
- * All Sheet access: leads, search log and blocklist. Mirrors ingestion/store.py, so the
- * rest of the code never knows where data lives. Columns are found by header name (see
+ * All Sheet access: leads, search log and blocklist, so the rest of the code never
+ * knows where data lives. Columns are found by header name (see
  * schema.js), not position, and every value is read and written as plain text.
  */
 

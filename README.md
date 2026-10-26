@@ -9,7 +9,7 @@ See docs/proposal.md and docs/technical_spec.md note that infrastructure related
 - sheets.md holds simple detail on what sheets used in the project and their columns
 
 ## Ingestion
-Using the shovels.ai API, the code here finds the emails of 10 electricians who recently filed an electric permit and have not already been found. Saved in leads.json, will be switching to a leads sheet
+Using the shovels.ai API, the code here finds the emails of 10 electricians who recently filed an electric permit and have not already been found. Saved in leads sheet
 
 ## Send email (coming soon)
 New directory would handle this, Uses a template that can also be edited by a human. 

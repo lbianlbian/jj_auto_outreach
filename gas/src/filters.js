@@ -1,4 +1,4 @@
-/** Decide whether a contractor is a usable lead: shipping, size, blocklist and email checks. Port of filters.py. */
+/** Decide whether a contractor is a usable lead: shipping, size, blocklist and email checks. */
 
 // Contractors with more lifetime permits than this are national/large firms (e.g. Tesla
 // has ~75k), not the small shops we're pitching to.

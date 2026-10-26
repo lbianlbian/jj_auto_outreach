@@ -15,8 +15,11 @@ fixtures replies. It doesn't try to cover every contractor.
   their "LLM writes each email" step, and their infrastructure (Render.com cron,
   Postgres, a separate dashboard). See Decisions. Where research changes something else,
   the user will say so.
-- `ingestion/CLAUDE.md` is the detailed reference for the Shovels API, credits, data lag
-  and lead filters. Read it before touching ingestion in either language.
+- `docs/ingestion.md` is the detailed reference for the Shovels API, credits, data lag
+  and lead filters. Read it before touching ingestion. Agents maintain it: keep it in step
+  with `gas/src/` and add new findings from live runs.
+- `docs/sheets.md` describes the Sheet's tabs and columns. It's the user's; don't edit it,
+  but suggest changes. `gas/src/schema.js` mirrors it.
 - `docs/plan.md` is the human-written task plan that gets turned into Linear tasks. Don't
   edit it unless asked. Suggesting tasks to add, change or remove is welcome.
 
@@ -24,14 +27,13 @@ fixtures replies. It doesn't try to cover every contractor.
 
 | Stage | State | Where |
 |---|---|---|
-| Ingestion | Done in Python. JS port written and tested offline, not pushed or run live yet | Python: `ingestion/`, writes `leads.json`. JS: `gas/src/`, writes the leads tab |
+| Ingestion | Done (Apps Script). Run by hand from the editor with approval; no trigger yet | `gas/src/`, writes the leads tab. See `docs/ingestion.md` |
 | Send email | Not started | Apps Script, `GmailApp`. Fills a template the user edits by hand |
 | Tracking | Not started | Apps Script + Google Sheet. Records sent emails and marks replies. Also a kill switch that stops everything when someone replies, or when the user pulls it to apply what they've learned |
 | Scheduling | Not started | Apps Script time-based triggers |
 
-**Next step:** finish clasp setup (JJ-10). The user runs `clasp login`, then
-`clasp create`, `clasp push` and `setup()` in the editor. After that, one user-approved
-live run of `runIngestion()` (JJ-11). Linear has the current task list and order. See Linear below.
+**Next step:** sending (JJ-12) and the kill switch (JJ-13). Linear has the current task
+list and order. See Linear below.
 
 ## Linear (task tracking)
 Tasks live in the Linear project **JJ auto outreach** (team `JJ`), reached through the
@@ -79,12 +81,12 @@ repo.
   a course goal. Don't propose Render, Postgres, a Cloud-project Gmail API client, or a
   self-hosted MCP server for Apps Script.
 - **Google Sheets is the datastore and the dashboard.** Leads, sent emails, replies,
-  seen contractors, the search log, the blocklist and the kill switch live in Sheet tabs.
+  the search log, the blocklist and the kill switch live in Sheet tabs.
   The Sheet also powers a simple HTML dashboard served by the Apps Script web app. Both
   views stay available: the Sheet for raw data and editing, the HTML page for a summary.
-- **Ingestion gets ported from Python to JS, tests first.** Port the pytest suite to JS
-  (run with Node, offline), then port the code until it passes. Keep the Python code as
-  the reference until the user says the JS version replaces it.
+- **The Python ingestion was ported to JS tests-first, then deleted** (2026-10-26, after
+  a live run). It's in git history; `docs/ingestion.md` holds what it taught us. Don't
+  bring it back.
 - **Emails come from a template, not an LLM.** The Shovels data has no bio or free text
   worth personalizing from. Website, LinkedIn, revenue, employee count and industry are
   always null. The template takes slots (contact name, company, city, and project type
@@ -93,34 +95,32 @@ repo.
 - **A planned later LLM use is lead filtering.** It would be a yes/no "does this company
   buy light fixtures?" check, e.g. to drop fire-alarm and sprinkler companies, which
   pass the electrical classification filter today. Not implemented.
-- **Never ship to Alaska or Hawaii.** This is enforced in `ingestion/` in three places
-  (see `ingestion/CLAUDE.md`). The JS port must keep all three, with tests, and no new
-  stage may undo it.
+- **Never ship to Alaska or Hawaii.** This is enforced in three places in `gas/src/`,
+  each with a test (see `docs/ingestion.md`). Keep all three, and no new stage may undo it.
 
 ## Commands
 ```
-# Python (current ingestion)
-python -m pytest                                   # all tests; offline, no credits
-python -m ingestion.shovels --out leads.json       # LIVE: spends Shovels credits
-python -m ingestion.shovels --states CA TX --max-leads 5 --out leads.json
+# Shovels CLI (repo root; needs SHOVELS_API_KEY from .env in the environment)
 shovels_executable/shovels.exe <cmd> --schema      # response fields, free
 shovels_executable/shovels.exe <cmd> --dry-run     # exact HTTP request, free
 
 # Apps Script (run from gas/)
 npm test                                           # Node tests for src/; offline, no credits
-clasp push                                         # local files -> GAS project
+clasp push --force                                 # local files -> GAS project (--force skips the manifest prompt)
 clasp deploy -i <deploymentId>                     # update existing deployment, same URL
 clasp open                                         # open the script in the editor
 ```
-Windows machine, Python 3.13. `pytest.ini` sets `testpaths = tests` and `pythonpath = .`.
+Windows machine, Node 22. Functions run from the Apps Script editor (the user clicks
+Run): `clasp run` and `clasp logs` need a user-managed GCP project that isn't set up
+(JJ-21). `clasp create` overwrites `src/appsscript.json`; restore it if that happens.
 clasp v3 renamed some commands (e.g. `update-deployment`), so check `clasp --help`
 before relying on the names above.
 
 ## Hard rules
 - **Shovels credits are scarce and real.** Billing is 1 credit per record returned. The
   account has a 500-credit rolling 30-day limit, and most of it is used up. **Never make
-  a paid Shovels call unless the user approves it first.** That covers running
-  `ingestion.shovels` without the mock, running a GAS function that fetches from Shovels,
+  a paid Shovels call unless the user approves it first.** That covers running a GAS
+  function that fetches from Shovels (`runIngestion()`),
   and creating or enabling a trigger that does. Free calls: `--schema`, `--dry-run`,
   `GET /usage`, `/meta/coverage`, and any response with zero records.
 - **Unattended credit spending is not approved yet.** A trigger that runs ingestion needs
@@ -129,8 +129,8 @@ before relying on the names above.
   The guard needs offline tests. The user sets the thresholds and must sign off before
   any ingestion trigger is enabled.
 - **The API silently ignores unknown parameters**, and those calls still cost credits.
-  Check parameter names with `--dry-run` before any approved paid call, including from
-  the JS port.
+  Check parameter names with `--dry-run` before any approved paid call that sends new
+  or changed parameters.
 - `.env` holds `SHOVELS_API_KEY` locally. In GAS the key lives in Script Properties,
   never in source files that clasp pushes. Never print it, log it or commit it.
 - **OAuth consent is manual.** Scopes are declared in `appsscript.json` (`oauthScopes`).
@@ -141,38 +141,33 @@ before relying on the names above.
 - **Deploy to the existing deployment** (`-i <deploymentId>`) so the `/exec` URL doesn't
   change. Never create a new deployment unless asked. A web app deployed as "Anyone"
   must check a shared secret from Script Properties in the request body.
-- `ingestion/seen_contractors.json` and `ingestion/search_log.json` are written by the
-  script. Don't hand-edit them. `ingestion/blocklist.json` is hand-maintained, so add
-  bad domains and companies there (and to the blocklist tab once it exists). All JSON
-  files are gitignored on purpose: they're local state that is moving to Sheets.
-- In Python, read and write JSON state only through `ingestion/store.py`. In GAS, all
-  Sheet access goes through `gas/src/store.js` the same way (`setup.js` builds the Sheet),
-  so the rest of the code doesn't know where data lives.
-- **Tests must stay offline in both languages.** Python tests replace
-  `ShovelsClient._get` with a fake API. In JS, pass a fetch function into the logic
-  instead of calling `UrlFetchApp`, `GmailApp` or `SpreadsheetApp` directly, so tests can
-  pass fakes. When you change how leads are paged through, make sure the paging test
-  (`test_no_paid_contractor_goes_unused` and its JS port) still passes, because it
-  catches credit waste.
+- The leads and search_log tabs are written by the script; the blocklist and kill_switch
+  tabs are edited by hand. Add bad domains and companies to the blocklist tab (the seed
+  list in `schema.js` only applies when the tab is first created).
+- All Sheet access goes through `gas/src/store.js` (`setup.js` builds the Sheet), so the
+  rest of the code doesn't know where data lives.
+- **Tests must stay offline.** Pass a fetch function and the Google services into the
+  logic instead of calling `UrlFetchApp`, `GmailApp` or `SpreadsheetApp` directly, so
+  tests can pass fakes. Only `main.js` touches the real services. When you change how
+  leads are paged through, make sure the paging test (`no paid contractor goes unused`)
+  still passes, because it catches credit waste.
 
 ## Layout
 ```
-docs/                 proposal.md, technical_spec.md, plan.md (see Ownership of docs)
-ingestion/            Python Shovels -> leads (shovels.py CLI, client.py, leads.py, filters.py, store.py)
-leads.json            latest Python run's output: name, email, phone, state, permit_date, full contractor record
-shovels_executable/   vendored Shovels CLI binary and its README
-tests/                pytest suite for ingestion (test_ingestion.py)
+docs/                 proposal.md, technical_spec.md, plan.md, sheets.md, ingestion.md (see Ownership of docs)
+shovels_executable/   vendored Shovels CLI binary (gitignored) and its README
 gas/                  Apps Script project: clasp root, package.json (npm test)
   src/                pushed by clasp: schema, setup, store, filters, client, leads, main (entry points), appsscript.json
   test/               Node tests (never pushed). gas.js loads src/ into one shared scope like GAS; fakes.js
 ```
 All `src/` files share one global scope, as in Apps Script, so nothing is imported or
 exported. Keep top-level code to declarations. Tests compare vm-made values through the
-`assert` in `test/gas.js`.
+`assert` in `test/gas.js`. clasp also pushes subfolders of `src/` (shown as
+`folder/file` in the editor, still one global scope), so stages could be split into
+folders later; `test/gas.js` only loads top-level files today.
 
 ## Known gaps relevant to the next stages
-- In Python, "seen" means fetched, not emailed. In GAS, `runIngestion()` currently writes
-  leads with a blank `emailed_at`. Once sending exists, it should email the lead and then
+- `runIngestion()` currently writes leads with a blank `emailed_at`. Once sending exists, it should email the lead and then
   write the row with `emailed_at` set (rows left blank by earlier runs still need sending).
 - `primary_email` is sometimes a role address (`accounting@`, `licensing@`) or a
   permit-service address. Role addresses are accepted. Permit-service domains belong in

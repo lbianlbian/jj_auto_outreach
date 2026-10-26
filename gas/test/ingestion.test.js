@@ -1,4 +1,4 @@
-// Port of tests/test_ingestion.py: fetchLeads against a fake Shovels API (no network, no credits).
+// fetchLeads against a fake Shovels API (no network, no credits).
 const test = require('node:test');
 const {loadGas, plain, assert} = require('./gas');
 const {FakeShovels} = require('./fakes');

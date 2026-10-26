@@ -1,6 +1,6 @@
 /**
- * Thin client for the Shovels v2 API, tracking credits spent. Port of client.py.
- * Credits are billed per record returned, not per request; see ingestion/CLAUDE.md.
+ * Thin client for the Shovels v2 API, tracking credits spent.
+ * Credits are billed per record returned, not per request; see docs/ingestion.md.
  *
  * HTTP goes through an injected fetch(url, headers) -> {status, headers, body}, with
  * header names lowercased, so tests can pass a fake API. main.js passes UrlFetchApp.

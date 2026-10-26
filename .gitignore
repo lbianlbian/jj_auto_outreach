@@ -1,8 +1,3 @@
 .env
-*.json
 *.exe
-*__pycache__*
-# Apps Script project files are config, not local state
-!gas/package.json
-!gas/.clasp.json
-!gas/src/appsscript.json
+node_modules/

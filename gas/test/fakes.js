@@ -132,7 +132,7 @@ function contractor(i, overrides = {}) {
 /**
  * Serves /contractors/search sorted by id with a keyset cursor, and /meta/coverage counts,
  * over fake HTTP. Bills 1 credit per contractor returned, the way the real API does;
- * coverage and empty responses are free. Port of FakeShovels in tests/test_ingestion.py.
+ * coverage and empty responses are free.
  */
 class FakeShovels {
   constructor() {

@@ -1,6 +1,6 @@
 /**
  * Turn Shovels contractor searches into filtered leads while spending as few credits as
- * possible. Port of leads.py; see ingestion/CLAUDE.md for why it works this way.
+ * possible. See docs/ingestion.md for why it works this way.
  *
  * We only need a steady supply of new leads, not every contractor, so each (state, day)
  * is searched at most once and whatever a run doesn't use is abandoned. Shovels ingests
