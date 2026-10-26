@@ -4,6 +4,10 @@ This is a repo housing the documentation, tests, and code for a project for CS 1
 ## Business context
 See docs/proposal.md and docs/technical_spec.md note that infrastructure related content in there is now out of date
 
+## More documentation
+- docs/plan.md holds a human readable plan of what to do, and linear has the agent readable version. 
+- sheets.md holds simple detail on what sheets used in the project and their columns
+
 ## Ingestion
 Using the shovels.ai API, the code here finds the emails of 10 electricians who recently filed an electric permit and have not already been found. Saved in leads.json, will be switching to a leads sheet
 

@@ -24,13 +24,14 @@ fixtures replies. It doesn't try to cover every contractor.
 
 | Stage | State | Where |
 |---|---|---|
-| Ingestion | Done in Python, to be ported to Apps Script | `ingestion/`, writes `leads.json`. Will write to a leads Sheet |
+| Ingestion | Done in Python. JS port written and tested offline, not pushed or run live yet | Python: `ingestion/`, writes `leads.json`. JS: `gas/src/`, writes the leads tab |
 | Send email | Not started | Apps Script, `GmailApp`. Fills a template the user edits by hand |
 | Tracking | Not started | Apps Script + Google Sheet. Records sent emails and marks replies. Also a kill switch that stops everything when someone replies, or when the user pulls it to apply what they've learned |
 | Scheduling | Not started | Apps Script time-based triggers |
 
-**Next step:** set up clasp and the Apps Script project (Linear JJ-10). Linear has the
-current task list and order. See Linear below.
+**Next step:** finish clasp setup (JJ-10). The user runs `clasp login`, then
+`clasp create`, `clasp push` and `setup()` in the editor. After that, one user-approved
+live run of `runIngestion()` (JJ-11). Linear has the current task list and order. See Linear below.
 
 ## Linear (task tracking)
 Tasks live in the Linear project **JJ auto outreach** (team `JJ`), reached through the
@@ -55,6 +56,22 @@ repo.
   Say which lines need to change.
 
 ## Decisions (don't re-litigate)
+- **The Sheet is declared in code.** `gas/src/schema.js` lists every tab and column and
+  mirrors `docs/sheets.md`. `setup()` creates the spreadsheet on its first run, keeps its
+  ID in Script Properties (`SPREADSHEET_ID`), and on every run adds any missing tabs or
+  columns. It never deletes, renames, reorders or overwrites anything. The store finds
+  columns by header name. When `docs/sheets.md` changes, update `schema.js` to match.
+  If they disagree, tell the user.
+- **No seen-contractors list in GAS.** Shovels bills a repeat contractor whether or not
+  we skip it, so the list saved no credits. The leads tab is the do-not-contact-again
+  list, by `contractor_id` and email. Rejected contractors aren't stored and just get
+  filtered again, which is free.
+- **Keep the Sheet minimal.** Leads are `contractor_id, name, email, emailed_at` only.
+  Anything else (city, phone, tags) can be fetched again from Shovels by id. Add a column
+  only when a stage needs it. The plan for the send phase is to email first, then write
+  the lead with `emailed_at`.
+- **`targetLeads` is a minimum, not a cap.** Every lead on a page that was paid for is
+  written, even past the target. Pages still shrink to what's needed, so it rarely matters.
 - **Everything runs in Google Apps Script (GAS), developed locally with `clasp`.** This
   replaces the Render.com + Postgres plan. Reasons (from `README.md`): clasp lets agents
   develop and deploy GAS, Render cron jobs cost money, a Sheet-based system is simpler
@@ -89,7 +106,8 @@ python -m ingestion.shovels --states CA TX --max-leads 5 --out leads.json
 shovels_executable/shovels.exe <cmd> --schema      # response fields, free
 shovels_executable/shovels.exe <cmd> --dry-run     # exact HTTP request, free
 
-# Apps Script
+# Apps Script (run from gas/)
+npm test                                           # Node tests for src/; offline, no credits
 clasp push                                         # local files -> GAS project
 clasp deploy -i <deploymentId>                     # update existing deployment, same URL
 clasp open                                         # open the script in the editor
@@ -127,9 +145,9 @@ before relying on the names above.
   script. Don't hand-edit them. `ingestion/blocklist.json` is hand-maintained, so add
   bad domains and companies there (and to the blocklist tab once it exists). All JSON
   files are gitignored on purpose: they're local state that is moving to Sheets.
-- In Python, read and write JSON state only through `ingestion/store.py`. In GAS, keep
-  all Sheet access in one store module the same way, so the rest of the code doesn't
-  know where data lives.
+- In Python, read and write JSON state only through `ingestion/store.py`. In GAS, all
+  Sheet access goes through `gas/src/store.js` the same way (`setup.js` builds the Sheet),
+  so the rest of the code doesn't know where data lives.
 - **Tests must stay offline in both languages.** Python tests replace
   `ShovelsClient._get` with a fake API. In JS, pass a fetch function into the logic
   instead of calling `UrlFetchApp`, `GmailApp` or `SpreadsheetApp` directly, so tests can
@@ -144,13 +162,18 @@ ingestion/            Python Shovels -> leads (shovels.py CLI, client.py, leads.
 leads.json            latest Python run's output: name, email, phone, state, permit_date, full contractor record
 shovels_executable/   vendored Shovels CLI binary and its README
 tests/                pytest suite for ingestion (test_ingestion.py)
+gas/                  Apps Script project: clasp root, package.json (npm test)
+  src/                pushed by clasp: schema, setup, store, filters, client, leads, main (entry points), appsscript.json
+  test/               Node tests (never pushed). gas.js loads src/ into one shared scope like GAS; fakes.js
 ```
-The Apps Script project (clasp root, JS source and Node tests) doesn't exist yet. Ask
-the user where it should go before creating it.
+All `src/` files share one global scope, as in Apps Script, so nothing is imported or
+exported. Keep top-level code to declarations. Tests compare vm-made values through the
+`assert` in `test/gas.js`.
 
 ## Known gaps relevant to the next stages
-- "Seen" means fetched, not emailed. If sending fails, that contractor is never returned
-  again. The send and tracking stages should record `emailed_at` separately in the Sheet.
+- In Python, "seen" means fetched, not emailed. In GAS, `runIngestion()` currently writes
+  leads with a blank `emailed_at`. Once sending exists, it should email the lead and then
+  write the row with `emailed_at` set (rows left blank by earlier runs still need sending).
 - `primary_email` is sometimes a role address (`accounting@`, `licensing@`) or a
   permit-service address. Role addresses are accepted. Permit-service domains belong in
   the blocklist.

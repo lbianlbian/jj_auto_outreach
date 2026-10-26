@@ -12,10 +12,10 @@ This document is to stay human-written and a source for agents to connect to the
 - Exploration of and familiarization with shovels.ai
 - research of using AI to write emails
 - connect to linear
-
-## Next Up
 - set up clasp
 - Refactor ingestion/ to use google apps script
+
+## Next Up
 - set up email sending functionality (includes making the email template)
 - set up google apps script cron job
 - set up kill switch
@@ -27,3 +27,4 @@ This document is to stay human-written and a source for agents to connect to the
 - filter shovels.ai responses to verify electricians are actually electricians based on company name
 - email open tracker
 - dynamically improve email template based on previous responses and data with AI
+- enable terminal runs of GAS by setting up google cloud project optional
