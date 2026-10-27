@@ -14,8 +14,12 @@ human readable and should stay very simple no agent changes although suggest if 
 
 ## leads
 - stores leads that have been emailed
-- cols: contractor_id, emailed_at, name, email (in the future store the all emails instead of just primary email and LLM call picks the email most likely to be non generic and get a response)
+- storing zip code should help with attributing sales
+- cols: contractor_id, emailed_at, name, thread_id, zip code, email (in the future store the all emails instead of just primary email and LLM call picks the email most likely to be non generic and get a response)
 
 ## kill swtich sheet
 - just one cell in A2 of yes/no
 - A1: "Continue automatic outreach?"
+
+## template sheet
+- subject and body of email template to edit

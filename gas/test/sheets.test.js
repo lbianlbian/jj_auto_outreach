@@ -64,12 +64,12 @@ test('a column added to the schema is appended without moving existing data', ()
   const ss = setup().spreadsheet;
   const leads = ss.getSheetByName('leads');
   leads.getRange(2, 1, 1, 3).setValues([['C01', 'Shop 1', 'x1@shop1.com']]);
-  gas.SCHEMA.leads.columns.push('thread_id');
+  gas.SCHEMA.leads.columns.push('replied_at');
 
   const {changes} = setup();
 
-  assert.deepEqual(changes, ['added columns to leads: thread_id']);
-  assert.equal(leads.rows()[0].at(-1), 'thread_id');
+  assert.deepEqual(changes, ['added columns to leads: replied_at']);
+  assert.equal(leads.rows()[0].at(-1), 'replied_at');
   assert.deepEqual(leads.rows()[1].slice(0, 3), ['C01', 'Shop 1', 'x1@shop1.com']);
 });
 
@@ -100,16 +100,18 @@ test('leads round-trip by header name, even after columns are moved by hand', ()
   // Swap the first two header cells, as someone rearranging the Sheet might.
   sheet.getRange(1, 1, 1, 2).setValues([['emailed_at', 'contractor_id']]);
   // Leads carry extra fields for the template; only the schema's columns are written.
-  gas.appendLeads(ss, [{contractor_id: 'C01', name: 'Shop 1', email: 'x1@shop1.com', city: 'BESSEMER',
+  gas.appendLeads(ss, [{contractor_id: 'C01', name: 'Shop 1', email: 'x1@shop1.com', city: 'BESSEMER', zip_code: '01234',
                         project_type: 'remodel', emailed_at: '2026-10-21T09:00:00'},
                        {contractor_id: 'C02', name: 'Shop 2', email: 'x2@shop2.com'}]);
 
-  assert.deepEqual(sheet.rows()[0], ['emailed_at', 'contractor_id', 'name', 'email']);
-  assert.deepEqual(sheet.rows()[1], ['2026-10-21T09:00:00', 'C01', 'Shop 1', 'x1@shop1.com']);
+  assert.deepEqual(sheet.rows()[0], ['emailed_at', 'contractor_id', 'name', 'thread_id', 'zip_code', 'email']);
+  // Leading zero kept: written as plain text, not a number.
+  assert.deepEqual(sheet.rows()[1], ['2026-10-21T09:00:00', 'C01', 'Shop 1', '', '01234', 'x1@shop1.com']);
   assert.ok(sheet.formats.every(f => f.format === '@'));  // plain text: no date or number guessing
   assert.deepEqual(gas.loadLeads(ss), [
-    {emailed_at: '2026-10-21T09:00:00', contractor_id: 'C01', name: 'Shop 1', email: 'x1@shop1.com'},
-    {emailed_at: '', contractor_id: 'C02', name: 'Shop 2', email: 'x2@shop2.com'},
+    {emailed_at: '2026-10-21T09:00:00', contractor_id: 'C01', name: 'Shop 1', thread_id: '', zip_code: '01234',
+     email: 'x1@shop1.com'},
+    {emailed_at: '', contractor_id: 'C02', name: 'Shop 2', thread_id: '', zip_code: '', email: 'x2@shop2.com'},
   ]);
 });
 

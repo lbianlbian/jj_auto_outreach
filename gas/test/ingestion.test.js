@@ -42,11 +42,11 @@ test('first run filters and records outcomes', () => {
 
 test('lead rows carry the template slots', () => {
   const {api, fetch} = setup();
-  Object.assign(api.contractors.C01, {primary_phone: '(205) 585-8598', address: {city: 'BESSEMER', state: 'CA'},
+  Object.assign(api.contractors.C01, {primary_phone: '(205) 585-8598', address: {city: 'BESSEMER', state: 'CA', zip_code: '35020'},
                                       tag_tally: {electrical: 3, new_construction: 2, remodel: 1}});
   const lead = fetch(['CA'], 1).leads[0];
   assert.deepEqual(plain({...lead, contractor: undefined}), {
-    contractor_id: 'C01', name: 'Shop 1', email: 'x1@shop1.com', phone: '(205) 585-8598', city: 'BESSEMER',
+    contractor_id: 'C01', name: 'Shop 1', email: 'x1@shop1.com', phone: '(205) 585-8598', city: 'BESSEMER', zip_code: '35020',
     state: 'CA', permit_date: '2026-10-11', project_type: 'new construction',
   });
 });

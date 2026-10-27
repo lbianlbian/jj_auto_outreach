@@ -28,11 +28,11 @@ fixtures replies. It doesn't try to cover every contractor.
 | Stage | State | Where |
 |---|---|---|
 | Ingestion | Done (Apps Script). Run by hand from the editor with approval; no trigger yet | `gas/src/`, writes the leads tab. See `docs/ingestion.md` |
-| Send email | Not started | Apps Script, `GmailApp`. Fills a template the user edits by hand |
+| Send email | Built, awaiting consent and a test send (JJ-12) | `gas/src/send.js`. Fills the hand-edited `template` tab and sends via `GmailApp`; runs only when the kill switch says "yes" |
 | Tracking | Not started | Apps Script + Google Sheet. Records sent emails and marks replies. Also a kill switch that stops everything when someone replies, or when the user pulls it to apply what they've learned |
 | Scheduling | Not started | Apps Script time-based triggers |
 
-**Next step:** sending (JJ-12) and the kill switch (JJ-13). Linear has the current task
+**Next step:** finish JJ-12 (user fills in the template, approves the Gmail scope, does a test send), then the kill switch (JJ-13). Linear has the current task
 list and order. See Linear below.
 
 ## Linear (task tracking)
@@ -68,10 +68,10 @@ repo.
   we skip it, so the list saved no credits. The leads tab is the do-not-contact-again
   list, by `contractor_id` and email. Rejected contractors aren't stored and just get
   filtered again, which is free.
-- **Keep the Sheet minimal.** Leads are `contractor_id, name, email, emailed_at` only.
-  Anything else (city, phone, tags) can be fetched again from Shovels by id. Add a column
-  only when a stage needs it. The plan for the send phase is to email first, then write
-  the lead with `emailed_at`.
+- **Keep the Sheet minimal.** Leads are `contractor_id, emailed_at, name, thread_id, zip_code, email`
+  only (`zip_code` is for matching orders from people who never replied). Anything else (city, phone, tags) can be fetched again from Shovels by id. Add a column
+  only when a stage needs it. Leads are written with a blank `emailed_at` as soon as they're
+  paid for, then each row gets `emailed_at` and `thread_id` right after its email goes out.
 - **`targetLeads` is a minimum, not a cap.** Every lead on a page that was paid for is
   written, even past the target. Pages still shrink to what's needed, so it rarely matters.
 - **Everything runs in Google Apps Script (GAS), developed locally with `clasp`.** This
@@ -121,7 +121,8 @@ before relying on the names above.
   account has a 500-credit rolling 30-day limit, and most of it is used up. **Never make
   a paid Shovels call unless the user approves it first.** That covers running a GAS
   function that fetches from Shovels (`runIngestion()`),
-  and creating or enabling a trigger that does. Free calls: `--schema`, `--dry-run`,
+  and creating or enabling a trigger that does. Sending email is also live: `sendPendingEmails()` and
+  `runIngestion()` email real contractors when the kill switch says "yes", so run them only with approval. Free calls: `--schema`, `--dry-run`,
   `GET /usage`, `/meta/coverage`, and any response with zero records.
 - **Unattended credit spending is not approved yet.** A trigger that runs ingestion needs
   a guard first: check free `GET /usage` and skip the run below a threshold, enforce a
@@ -157,7 +158,7 @@ before relying on the names above.
 docs/                 proposal.md, technical_spec.md, plan.md, sheets.md, ingestion.md (see Ownership of docs)
 shovels_executable/   vendored Shovels CLI binary (gitignored) and its README
 gas/                  Apps Script project: clasp root, package.json (npm test)
-  src/                pushed by clasp: schema, setup, store, filters, client, leads, main (entry points), appsscript.json
+  src/                pushed by clasp: schema, setup, store, filters, client, leads, send, main (entry points), appsscript.json
   test/               Node tests (never pushed). gas.js loads src/ into one shared scope like GAS; fakes.js
 ```
 All `src/` files share one global scope, as in Apps Script, so nothing is imported or
@@ -167,11 +168,11 @@ exported. Keep top-level code to declarations. Tests compare vm-made values thro
 folders later; `test/gas.js` only loads top-level files today.
 
 ## Known gaps relevant to the next stages
-- `runIngestion()` currently writes leads with a blank `emailed_at`. Once sending exists, it should email the lead and then
-  write the row with `emailed_at` set (rows left blank by earlier runs still need sending).
+- Rows written before sending existed have no state in the Sheet, so their emails use the
+  slot fallback ("your area"). `TEMPLATE_SLOTS` in `send.js` holds the slots and fallbacks.
 - `primary_email` is sometimes a role address (`accounting@`, `licensing@`) or a
   permit-service address. Role addresses are accepted. Permit-service domains belong in
   the blocklist.
-- To track replies, save the Gmail thread ID for each send. `GmailApp.sendEmail()`
-  returns nothing, so use `GmailApp.createDraft(...).send()` and store
-  `getThread().getId()`.
+- Reply tracking (JJ-14) can use the `thread_id` that sending saves on each lead row. The
+  template asks people to reply "no thanks" to opt out, so any reply must stop further
+  emails to that lead, including follow-ups (JJ-16).

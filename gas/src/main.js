@@ -11,8 +11,12 @@ function setup() {
   console.log(`spreadsheet: ${result.spreadsheet.getUrl()}`);
 }
 
+// Most emails one run sends: today's new leads plus a backlog of unsent rows.
+const MAX_EMAILS_PER_RUN = 20;
+
 /**
- * LIVE: spends Shovels credits (1 per contractor returned, up to maxContractors).
+ * LIVE: spends Shovels credits (1 per contractor returned, up to maxContractors), then
+ * emails the new leads (and any unsent ones) if the kill switch says "yes".
  * Only run it with the user's approval. Don't put it on a trigger until the credit guard
  * exists (see the hard rules in CLAUDE.md).
  */
@@ -45,6 +49,47 @@ function runIngestion() {
     console.log(`wrote ${leads.length} leads; credits used: ${client.creditsUsed}, ` +
                 `remaining: ${client.creditsRemaining}`);
   }
+  sendPending_(spreadsheet, leads);
+}
+
+/** LIVE: emails every lead in the leads tab with a blank emailed_at. No Shovels calls. */
+function sendPendingEmails() {
+  sendPending_(openSpreadsheet(SpreadsheetApp, PropertiesService.getScriptProperties()), []);
+}
+
+/**
+ * Send the template, filled for a sample California lead, to your own address so you can
+ * see what leads get. Works while [placeholders] are still unfilled; ignores the kill switch.
+ */
+function sendTestEmail() {
+  const spreadsheet = openSpreadsheet(SpreadsheetApp, PropertiesService.getScriptProperties());
+  const email = fillTemplate(loadTemplate(spreadsheet),
+                             {name: 'SAMPLE ELECTRIC INC', state: 'CA', city: 'FRESNO', project_type: 'remodel'});
+  const me = Session.getEffectiveUser().getEmail();
+  gmailSend_(me, `[TEST] ${email.subject}`, email.body);
+  console.log(`sent a test email to ${me}`);
+}
+
+/** Email pending leads, marking each row as soon as its email goes out. freshLeads fill the slots. */
+function sendPending_(spreadsheet, freshLeads) {
+  if (!outreachEnabled(spreadsheet)) {
+    console.log('kill switch is not "yes": no emails sent');
+    return;
+  }
+  const tz = spreadsheet.getSpreadsheetTimeZone();
+  const result = sendEmails(pendingLeads(loadLeads(spreadsheet), freshLeads), loadTemplate(spreadsheet),
+                            loadBlocklist(spreadsheet), gmailSend_, {
+    now: () => Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm'),
+    maxEmails: MAX_EMAILS_PER_RUN,
+    onSent: sent => markEmailed(spreadsheet, sent.contractor_id, sent.emailed_at, sent.thread_id),
+  });
+  console.log(`sent ${result.sent.length} emails` +
+              (result.blocked.length ? `; blocklisted, not sent: ${result.blocked.join(', ')}` : ''));
+}
+
+/** Send a plain-text email and return its Gmail thread ID (sendEmail() returns nothing). */
+function gmailSend_(to, subject, body) {
+  return GmailApp.createDraft(to, subject, body).send().getThread().getId();
 }
 
 /** UrlFetchApp in the shape ShovelsClient expects: {status, headers (lowercased), body}. */

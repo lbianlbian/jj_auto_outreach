@@ -96,6 +96,7 @@ function fetchLeads(client, states, options) {
       email: email,
       phone: contractor.primary_phone || '',
       city: (contractor.address || {}).city || '',
+      zip_code: (contractor.address || {}).zip_code || '',
       state: state,
       permit_date: day,
       project_type: projectType(contractor),

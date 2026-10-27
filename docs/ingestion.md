@@ -4,8 +4,9 @@
 searches the Shovels API for electrical contractors who filed a permit on a recent day,
 filters them and writes at least 10 new leads per run to the leads tab of the Sheet. Each
 lead in memory has a name, primary email, phone, city, state, permit day, project type
-(from `tag_tally`) and the full contractor record. Only `contractor_id, emailed_at, name,
-email` are written to the Sheet; the rest is there for the send step's template.
+(from `tag_tally`), zip code and the full contractor record. Only `contractor_id, name,
+zip_code, email` are written to the Sheet (sending adds `emailed_at` and `thread_id`); the
+rest is there for the send step's template.
 
 `runIngestion()` spends credits. Run it from the Apps Script editor only with the user's
 approval. It reads `SHOVELS_API_KEY` from Script Properties.

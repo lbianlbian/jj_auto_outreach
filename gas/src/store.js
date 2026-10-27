@@ -27,8 +27,38 @@ function appendLeads(spreadsheet, leads) {
   const sheet = sheet_(spreadsheet, 'leads');
   const rows = leads.map(lead => ({
     contractor_id: lead.contractor_id, name: lead.name, email: lead.email, emailed_at: lead.emailed_at || '',
+    thread_id: lead.thread_id || '', zip_code: lead.zip_code || '',
   }));
   writeRows_(sheet, sheet.getLastRow() + 1, rows);
+}
+
+/** Set emailed_at and thread_id on the lead's existing row. Throws if the lead isn't in the tab. */
+function markEmailed(spreadsheet, contractorId, emailedAt, threadId) {
+  const sheet = sheet_(spreadsheet, 'leads');
+  const header = readHeader(sheet);
+  const idCol = header.indexOf('contractor_id');
+  // Scan the raw column, not readRows_, which drops blank rows and so loses row numbers.
+  const ids = sheet.getLastRow() > 1 ? sheet.getRange(2, idCol + 1, sheet.getLastRow() - 1, 1).getValues() : [];
+  const index = ids.findIndex(([id]) => String(id).trim() === contractorId);
+  if (index === -1) throw new Error(`No lead ${contractorId} in the leads tab.`);
+  [['emailed_at', emailedAt], ['thread_id', threadId]].forEach(([name, value]) => {
+    const col = header.indexOf(name);
+    if (col === -1) throw new Error(`"leads" tab has no column ${name}: run setup() first.`);
+    sheet.getRange(index + 2, col + 1).setNumberFormat('@').setValues([[String(value)]]);
+  });
+}
+
+/** The pitch email as {subject, body}, from the template tab's first row. */
+function loadTemplate(spreadsheet) {
+  const row = readRows_(sheet_(spreadsheet, 'template'))[0];
+  if (!row || !row.subject || !row.body) throw new Error('The template tab needs a subject and a body in row 2.');
+  return {subject: row.subject, body: row.body};
+}
+
+/** True only when the kill switch cell (A2) says "yes"; anything else means stop. */
+function outreachEnabled(spreadsheet) {
+  const values = sheet_(spreadsheet, 'kill_switch').getRange(2, 1).getValues();
+  return String(values[0][0]).trim().toLowerCase() === 'yes';
 }
 
 /** Return {state: {last_searched, days: [searched days]}}, the shape fetchLeads uses. */

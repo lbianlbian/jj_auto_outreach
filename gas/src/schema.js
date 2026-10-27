@@ -14,8 +14,9 @@ const SPREADSHEET_ID_PROPERTY = 'SPREADSHEET_ID';
 const SCHEMA = {
   // Leads, and the "don't contact again" list: ingestion skips any contractor_id or email
   // already here. Kept minimal on purpose; anything else can be looked up in Shovels by id.
+  // zip_code is the contractor's address, to match a later order that never replied to the email.
   leads: {
-    columns: ['contractor_id', 'emailed_at', 'name', 'email'],
+    columns: ['contractor_id', 'emailed_at', 'name', 'thread_id', 'zip_code', 'email'],
   },
   // Days already searched per state, as inclusive date ranges. A state with no data gets
   // a row with blank start/end so searched_at still rotates it to the back.
@@ -46,8 +47,36 @@ const SCHEMA = {
       ],
     },
   },
+  // The pitch email, hand-edited: subject in A2, body in B2. Slots in {braces} are filled per
+  // lead (see TEMPLATE_SLOTS in send.js); anything still in [square brackets] blocks sending.
+  template: {
+    columns: ['subject', 'body'],
+    seed: {
+      subject: ['Light fixtures for your project in {state}'],
+      body: [[
+        'Hi there,',
+        '',
+        "I'm [your name], a student helping out with my dad's small online lighting store, JoJoSpring. " +
+          'I saw you recently pulled an electrical permit in {state}, so I wanted to reach out.',
+        '',
+        'We sell quality light fixtures at low prices. You can see everything at https://www.jojospring.com.',
+        '',
+        "If you need several fixtures for a job, just reply to this email and we'll put together a " +
+          'discount on the bundle.',
+        '',
+        'Wishing you the best with the project, and we hope we can help!',
+        '',
+        '[your name]',
+        'JoJoSpring · https://www.jojospring.com',
+        '[mailing address]',
+        '',
+        `P.S. If you'd rather not hear from us, reply "no thanks" and we won't email again.`,
+      ].join('\n')],
+    },
+  },
   // One cell, A2: "yes" lets automatic outreach run, anything else stops it. Starts at "no"
-  // so nothing runs on its own until it's turned on by hand. Not read by any code yet (JJ-13).
+  // so nothing runs on its own until it's turned on by hand. Sending checks it (outreachEnabled);
+  // flipping it automatically on a reply is JJ-13.
   kill_switch: {
     columns: ['Continue automatic outreach?'],
     seed: {'Continue automatic outreach?': ['no']},
