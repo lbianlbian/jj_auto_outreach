@@ -28,11 +28,11 @@ fixtures replies. It doesn't try to cover every contractor.
 | Stage | State | Where |
 |---|---|---|
 | Ingestion | Done (Apps Script). Run by hand from the editor with approval; no trigger yet | `gas/src/`, writes the leads tab. See `docs/ingestion.md` |
-| Send email | Built, awaiting consent and a test send (JJ-12) | `gas/src/send.js`. Fills the hand-edited `template` tab and sends via `GmailApp`; runs only when the kill switch says "yes" |
+| Send email | Done (JJ-12). Test send verified; no real contractor emailed yet | `gas/src/send.js`. Fills the hand-edited `template` tab and sends via `GmailApp`; runs only when the kill switch says "yes" |
 | Tracking | Not started | Apps Script + Google Sheet. Records sent emails and marks replies. Also a kill switch that stops everything when someone replies, or when the user pulls it to apply what they've learned |
 | Scheduling | Not started | Apps Script time-based triggers |
 
-**Next step:** finish JJ-12 (user fills in the template, approves the Gmail scope, does a test send), then the kill switch (JJ-13). Linear has the current task
+**Next step:** the kill switch in every stage (JJ-13), then reply tracking (JJ-14). Linear has the current task
 list and order. See Linear below.
 
 ## Linear (task tracking)

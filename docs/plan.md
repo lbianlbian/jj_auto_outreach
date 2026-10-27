@@ -14,9 +14,9 @@ This document is to stay human-written and a source for agents to connect to the
 - connect to linear
 - set up clasp
 - Refactor ingestion/ to use google apps script
+- set up email sending functionality (includes making the email template)
 
 ## Next Up
-- set up email sending functionality (includes making the email template)
 - set up google apps script cron job
 - set up kill switch
 - set up tracking email sent functionality
