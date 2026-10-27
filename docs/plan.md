@@ -28,3 +28,4 @@ This document is to stay human-written and a source for agents to connect to the
 - email open tracker
 - dynamically improve email template based on previous responses and data with AI
 - enable terminal runs of GAS by setting up google cloud project optional
+- automatically stop outreach/add to blocklist when someone replies to opt out
