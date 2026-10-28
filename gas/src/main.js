@@ -1,5 +1,5 @@
 /**
- * Entry points run from the Apps Script editor (and later by triggers). These are the only
+ * Entry points run from the Apps Script editor or by triggers. These are the only
  * functions that touch the real Google services; everything they call takes the services
  * as arguments so the Node tests can pass fakes.
  */
@@ -15,54 +15,49 @@ function setup() {
 const MAX_EMAILS_PER_RUN = 20;
 
 /**
- * LIVE: if the kill switch says "yes", spends Shovels credits (1 per contractor returned,
- * up to maxContractors), then emails the new leads (and any unsent ones).
- * Only run it with the user's approval. Don't put it on a trigger until the credit guard
- * exists (see the hard rules in CLAUDE.md).
+ * LIVE: what the weekday trigger runs (see setupTriggers), and the way to run ingestion by
+ * hand. If the kill switch says "yes": checks bounces, spends up to RUN_CREDIT_CAP Shovels
+ * credits when the free /usage check shows at least MIN_CREDITS_TO_RUN left, then emails
+ * the new leads and any unsent ones. Every run, even a skipped one, gets a run_log row.
  */
-function runIngestion() {
-  const properties = PropertiesService.getScriptProperties();
-  const apiKey = properties.getProperty('SHOVELS_API_KEY');
-  if (!apiKey) throw new Error('Set the SHOVELS_API_KEY script property first.');
-  const spreadsheet = openSpreadsheet(SpreadsheetApp, properties);
-  const client = new ShovelsClient(apiKey, urlFetch_, ms => Utilities.sleep(ms));
-  const today = Utilities.formatDate(new Date(), spreadsheet.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
-  const leads = ingest_(spreadsheet, client, today);
-  if (leads) sendPending_(spreadsheet, leads);
+function dailyRun() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) {
+    console.log('another run is still going: skipped');
+    return;
+  }
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    const apiKey = properties.getProperty('SHOVELS_API_KEY');
+    if (!apiKey) throw new Error('Set the SHOVELS_API_KEY script property first.');
+    const spreadsheet = openSpreadsheet(SpreadsheetApp, properties);
+    const client = new ShovelsClient(apiKey, urlFetch_, ms => Utilities.sleep(ms));
+    const tz = spreadsheet.getSpreadsheetTimeZone();
+    const log = runDaily_(spreadsheet, client, {
+      today: Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd'),
+      now: () => Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm'),
+      checkBounces: () => checkBounces_(spreadsheet),
+      send: leads => sendPending_(spreadsheet, leads),
+    });
+    console.log(JSON.stringify(log));
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**
- * Fetch new leads into the leads tab and return them, or return null without a single
- * Shovels call when the kill switch isn't "yes". Takes no Google services, so tests can run it.
+ * Schedule dailyRun() for weekdays between 7 and 8am in the script's time zone. Replaces
+ * any dailyRun triggers already there, so rerunning it never doubles them up.
  */
-function ingest_(spreadsheet, client, today, states = US_STATES) {
-  if (!outreachEnabled(spreadsheet)) {
-    console.log('kill switch is not "yes": no Shovels calls, no emails sent');
-    return null;
-  }
-  const searchLog = loadSearchLog(spreadsheet);
-  let leads = [];
-  try {
-    leads = fetchLeads(client, states, {
-      today: today,
-      blocklist: loadBlocklist(spreadsheet),
-      knownLeads: loadLeads(spreadsheet),
-      searchLog: searchLog,
-      targetLeads: 10,
-      maxContractors: 50,
-    }).leads;
-  } catch (e) {
-    // Keep the leads found before the failure: they're already paid for.
-    leads = (e.partial && e.partial.leads) || [];
-    throw e;
-  } finally {
-    // Save even on failure so days and leads already paid for aren't fetched again.
-    appendLeads(spreadsheet, leads);
-    saveSearchLog(spreadsheet, searchLog);
-    console.log(`wrote ${leads.length} leads; credits used: ${client.creditsUsed}, ` +
-                `remaining: ${client.creditsRemaining}`);
-  }
-  return leads;
+function setupTriggers() {
+  const result = installTriggers_(ScriptApp);
+  console.log(`removed ${result.removed} old trigger(s), created ${result.created}: ` +
+              `dailyRun() on weekdays at ${DAILY_RUN_HOUR}-${DAILY_RUN_HOUR + 1}h`);
+}
+
+/** Delete the dailyRun triggers. The kill switch also stops runs without touching triggers. */
+function removeTriggers() {
+  console.log(`removed ${removeTriggers_(ScriptApp)} trigger(s)`);
 }
 
 /** LIVE: emails every lead in the leads tab with a blank emailed_at. No Shovels calls. */
@@ -104,11 +99,14 @@ function checkBounces_(spreadsheet) {
               `marked delivered: ${result.delivered.length}`);
 }
 
-/** Email pending leads, marking each row as soon as its email goes out. freshLeads fill the slots. */
+/**
+ * Email pending leads, marking each row as soon as its email goes out. freshLeads fill the
+ * slots. Returns how many were sent.
+ */
 function sendPending_(spreadsheet, freshLeads) {
   if (!outreachEnabled(spreadsheet)) {
     console.log('kill switch is not "yes": no emails sent');
-    return;
+    return 0;
   }
   checkBounces_(spreadsheet);  // catches the last run's bounces
   const tz = spreadsheet.getSpreadsheetTimeZone();
@@ -123,6 +121,7 @@ function sendPending_(spreadsheet, freshLeads) {
   console.log(`sent ${result.sent.length} emails` +
               (result.blocked.length ? `; blocklisted, not sent: ${result.blocked.join(', ')}` : '') +
               (result.undeliverable.length ? `; no mail server, not sent: ${result.undeliverable.join(', ')}` : ''));
+  return result.sent.length;
 }
 
 /** Send a plain-text email and return its Gmail thread ID (sendEmail() returns nothing). */

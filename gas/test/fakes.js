@@ -156,6 +156,9 @@ class FakeShovels {
     // Test knobs: return at least this many records per page, and fail the Nth search (1 = first).
     this.minPage = 0;
     this.failOnSearch = null;
+    // Free /usage reports credits used before this test plus what the fake has billed.
+    this.creditLimit = 500;
+    this.usedBefore = 0;
     this.reset();
     this.fetch = this.fetch.bind(this);
   }
@@ -188,6 +191,10 @@ class FakeShovels {
     if (path === '/meta/coverage') {
       const total = this.inWindow(params.geo_id, params.date_from, params.date_to).length;
       return json({items: [{field: 'fees', tier: 'missing', permits_total: total}]});
+    }
+    if (path === '/usage') {
+      return json({credits_used: this.usedBefore + this.billed, credit_limit: this.creditLimit,
+                   is_over_limit: this.usedBefore + this.billed >= this.creditLimit, available_at: null, daily_usage: []});
     }
     if (path !== '/contractors/search') return {status: 404, headers: {}, body: '{"detail":"Not Found"}'};
     if (this.failOnSearch !== null && this.searched().length === this.failOnSearch) {

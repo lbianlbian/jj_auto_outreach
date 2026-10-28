@@ -27,14 +27,15 @@ fixtures replies. It doesn't try to cover every contractor.
 
 | Stage | State | Where |
 |---|---|---|
-| Ingestion | Done (Apps Script). Run by hand from the editor with approval; no trigger yet | `gas/src/`, writes the leads tab. See `docs/ingestion.md` |
+| Ingestion | Done (Apps Script). Runs inside `dailyRun()` behind the credit guard |  `gas/src/`, writes the leads tab. See `docs/ingestion.md` |
 | Send email | Done (JJ-12). Real contractors emailed | `gas/src/send.js`. Fills the hand-edited `template` tab and sends via `GmailApp`; runs only when the kill switch says "yes" |
 | Bounces | Done (JJ-23). Verified live: `checkBounces()` marked the first real bounce | `gas/src/bounces.js`. Skips domains with no MX record before sending; `checkBounces()` matches Gmail bounce notices to leads. Both write `email_success` |
 | Tracking | Not started | Apps Script + Google Sheet. Records sent emails and marks replies. Also a kill switch that stops everything when someone replies, or when the user pulls it to apply what they've learned |
-| Scheduling | Not started | Apps Script time-based triggers |
+| Scheduling | Built (JJ-20); triggers not installed yet | `gas/src/daily.js`. `dailyRun()` = kill switch → bounce check → credit guard → ingestion → send → `run_log` row. `setupTriggers()` schedules it weekdays 7–8am PT |
 
-**Next step:** reply tracking (JJ-14). The kill switch (JJ-13) gates both entry points:
-`runIngestion()` makes no Shovels calls unless it says "yes", and sending checks it too. Linear has the current task
+**Next step:** the user runs `setupTriggers()` (new `script.scriptapp` consent), then reply
+tracking (JJ-14). The kill switch (JJ-13) gates every entry point: `dailyRun()` makes no
+Shovels calls unless it says "yes", and sending checks it too. Linear has the current task
 list and order. See Linear below.
 
 ## Linear (task tracking)
@@ -122,15 +123,17 @@ before relying on the names above.
 - **Shovels credits are scarce and real.** Billing is 1 credit per record returned. The
   account has a 500-credit rolling 30-day limit, and most of it is used up. **Never make
   a paid Shovels call unless the user approves it first.** That covers running a GAS
-  function that fetches from Shovels (`runIngestion()`),
+  function that fetches from Shovels (`dailyRun()`),
   and creating or enabling a trigger that does. Sending email is also live: `sendPendingEmails()` and
-  `runIngestion()` email real contractors when the kill switch says "yes", so run them only with approval. Free calls: `--schema`, `--dry-run`,
+  `dailyRun()` email real contractors when the kill switch says "yes", so run them only with approval. Free calls: `--schema`, `--dry-run`,
   `GET /usage`, `/meta/coverage`, and any response with zero records.
-- **Unattended credit spending is not approved yet.** A trigger that runs ingestion needs
-  a guard first: check free `GET /usage` and skip the run below a threshold, enforce a
-  hard per-run record cap, honor the kill switch, and log every spend to a Sheet tab.
-  The guard needs offline tests. The user sets the thresholds and must sign off before
-  any ingestion trigger is enabled.
+- **Unattended credit spending is approved only behind the guard** (user sign-off
+  2026-10-28). `dailyRun()` checks the free `GET /usage` and skips ingestion below
+  `MIN_CREDITS_TO_RUN` (20), fetches at most `RUN_CREDIT_CAP` (20) contractors a run,
+  honors the kill switch, and logs every run to the `run_log` tab. Both numbers are in
+  `gas/src/daily.js` and are the user's; don't change them, or the cap above the floor,
+  without asking. The guard's tests are in `gas/test/daily.test.js`. Any other trigger
+  that spends credits needs its own sign-off.
 - **The API silently ignores unknown parameters**, and those calls still cost credits.
   Check parameter names with `--dry-run` before any approved paid call that sends new
   or changed parameters.

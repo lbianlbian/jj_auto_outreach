@@ -1,6 +1,6 @@
 # Ingestion: Shovels.ai → contractor leads
 
-`runIngestion()` (in `gas/src/main.js`) is the first step of the outreach pipeline. It
+Ingestion (`ingest_()` in `gas/src/daily.js`, run by `dailyRun()`) is the first step of the outreach pipeline. It
 searches the Shovels API for electrical contractors who filed a permit on a recent day,
 filters them and writes at least 10 new leads per run to the leads tab of the Sheet. Each
 lead in memory has a name, primary email, phone, city, state, permit day, project type
@@ -8,12 +8,14 @@ lead in memory has a name, primary email, phone, city, state, permit day, projec
 zip_code, email` are written to the Sheet (sending adds `emailed_at` and `thread_id`); the
 rest is there for the send step's template.
 
-`runIngestion()` spends credits. Run it from the Apps Script editor only with the user's
-approval. It reads `SHOVELS_API_KEY` from Script Properties.
+`dailyRun()` spends credits. The weekday trigger runs it behind the credit guard (see
+[Credits](#credits)); running it by hand from the editor still needs the user's approval.
+It reads `SHOVELS_API_KEY` from Script Properties.
 
 | File (`gas/src/`) | Purpose |
 |---|---|
-| `main.js` | Entry points: `setup()`, `runIngestion()`, and the `UrlFetchApp` adapter |
+| `main.js` | Entry points: `setup()`, `dailyRun()`, `setupTriggers()`, and the `UrlFetchApp` adapter |
+| `daily.js` | `runDaily_()`: kill switch, credit guard, `ingest_()`, sending and the run_log row. Also the trigger schedule |
 | `client.js` | `ShovelsClient`: HTTP, retries, one page of contractor search, coverage counts, credit tracking |
 | `leads.js` | `fetchLeads()`: picking days, state rotation and the credit-saving search loop. Also `US_STATES` |
 | `filters.js` | `Blocklist` and `skipReason()`: which contractors count as leads |
@@ -47,7 +49,7 @@ Shovels adds late. Design choices below lean on this.
 **JoJoSpring can't ship to Alaska or Hawaii, so contractors there are never leads.** This
 is enforced in three places, each with a test:
 
-- `US_STATES` in `leads.js`, the state list `runIngestion()` passes, leaves out `AK` and `HI`.
+- `US_STATES` in `leads.js`, the state list `ingest_()` passes, leaves out `AK` and `HI`.
 - `fetchLeads()` drops `UNSHIPPABLE_STATES` from any state list it's given, even `['AK']`,
   before making any call. That includes the free coverage calls.
 - `skipReason()` rejects a contractor whose own `address.state` is `AK` or `HI`
@@ -135,6 +137,18 @@ response with no records costs nothing and has no credit headers.
 - **The limit looks like a rolling 30 days.** `GET /usage` (free) lists credits per day,
   each with an `expires` date 30 days later. For example, the 411 used on 2026-10-21
   expire on 2026-11-20. This is inferred from the response, not confirmed with Shovels.
+- **`GET /usage` raw response** (checked 2026-10-28, 35 left): `{"credits_used": 465,
+  "credit_limit": 500, "is_over_limit": false, "available_at": null, "daily_usage":
+  [{"date", "credits", "expires"}, ...]}`. The CLI wraps this in `{"data": ..., "meta": {}}`;
+  the API itself doesn't. `ShovelsClient.usage()` reads it as remaining = limit − used.
+
+### Credit guard
+`dailyRun()` asks `/usage` before any paid call and skips ingestion (still sending any
+pending leads) when fewer than `MIN_CREDITS_TO_RUN` (20) are left, the account is over
+its limit, or the balance can't be read. A run then fetches at most `RUN_CREDIT_CAP` (20)
+contractors. The cap is never above the floor, so a run can't overdraw. Both thresholds were
+set by the user on 2026-10-28. Every run, skipped or not, adds a row to the `run_log` tab
+with credits used and remaining.
 
 ### Why contractor search: the old permit-based flow
 
@@ -169,8 +183,8 @@ contractors, because active contractors file many permits and every one is paid 
 - **Each (state, day) is searched at most once,** so no run pays to re-read a day. A day
   is marked searched before it's fetched, so a failure partway doesn't cause a re-read.
 - **Finding the starting day is free:** it uses the coverage endpoint, and empty days cost nothing anyway.
-- **`maxContractors`** (50 in `runIngestion()`) is a safety cap on contractors fetched,
-  and so on credits, per run.
+- **`maxContractors`** (`RUN_CREDIT_CAP`, 20, in `ingest_()`) is a hard cap on contractors
+  fetched, and so on credits, per run.
 - **Saved on failure:** if a run throws partway, the leads found so far and the search
   log are still written, so nothing paid for is lost.
 
@@ -377,8 +391,7 @@ Deliberately **not** filtered:
 ## Open issues / TODOs
 - [ ] Check whether the classification filter is too strict in states like AZ.
 - [ ] Measure how many real electricians `contractor_classification_derived=electrical` drops.
-- [ ] Credit guard before any ingestion trigger: check free `GET /usage`, skip below a
-      threshold, honor the kill switch, log every spend to a Sheet tab (see CLAUDE.md).
+- [x] Credit guard before any ingestion trigger: `creditGuard_()` in `daily.js` (2026-10-28).
 - [ ] Re-measure the data lag on other days, to confirm older days really don't change.
       The coverage check makes this free: log each state's daily `permits_total` per run.
 - [ ] Keep growing the blocklist tab as bad leads appear.

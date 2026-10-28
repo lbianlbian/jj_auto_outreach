@@ -24,3 +24,7 @@ human readable and should stay very simple no agent changes although suggest if 
 
 ## template sheet
 - subject and body of email template to edit
+
+## run_log
+- records the runs that were made and what happened, also includes skipped runs when kill switch was on
+- cols: ran_at, ingested, credits_used, credits_remaining, leads, emails_sent

@@ -1,7 +1,7 @@
 /**
- * All Sheet access: leads, search log and blocklist, so the rest of the code never
- * knows where data lives. Columns are found by header name (see
- * schema.js), not position, and every value is read and written as plain text.
+ * All Sheet access: leads, search log, blocklist, template, kill switch and run log, so
+ * the rest of the code never knows where data lives. Columns are found by header name
+ * (see schema.js), not position, and every value is read and written as plain text.
  */
 
 /** The spreadsheet setup() created. Throws if setup() hasn't been run yet. */
@@ -51,6 +51,12 @@ function updateLead(spreadsheet, contractorId, fields) {
     if (col === -1) throw new Error(`"leads" tab has no column ${name}: run setup() first.`);
     sheet.getRange(index + 2, col + 1).setNumberFormat('@').setValues([[String(value)]]);
   });
+}
+
+/** Add one row (from runDaily_) to the bottom of the run_log tab. */
+function appendRunLog(spreadsheet, row) {
+  const sheet = sheet_(spreadsheet, 'run_log');
+  writeRows_(sheet, sheet.getLastRow() + 1, [row]);
 }
 
 /** The pitch email as {subject, body}, from the template tab's first row. */

@@ -25,6 +25,11 @@ const SCHEMA = {
   search_log: {
     columns: ['state', 'start', 'end', 'searched_at'],
   },
+  // One row per dailyRun(), skipped runs included: the record of every credit spent.
+  // ingested is "yes" when the credit guard let ingestion run; note says why not, or what failed.
+  run_log: {
+    columns: ['ran_at', 'ingested', 'credits_used', 'credits_remaining', 'leads', 'emails_sent', 'note'],
+  },
   // Companies and email domains never to pitch. The two columns are independent lists.
   blocklist: {
     columns: ['company', 'email_domain'],

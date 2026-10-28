@@ -22,7 +22,8 @@ class ShovelsClient {
 
   /** GET with retry/backoff on 429 and 5xx. */
   get_(path, params) {
-    const url = `${SHOVELS_BASE_URL}${path}?${toQuery_(params)}`;
+    const query = toQuery_(params);
+    const url = `${SHOVELS_BASE_URL}${path}${query ? `?${query}` : ''}`;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       const resp = this.fetch(url, {'X-API-Key': this.apiKey, 'Accept': 'application/json'});
       if (resp.status === 429 || resp.status >= 500) {
@@ -40,6 +41,15 @@ class ShovelsClient {
       return JSON.parse(resp.body);
     }
     throw new Error(`${path} still failing after ${MAX_RETRIES} tries`);
+  }
+
+  /** Credit balance from the free /usage endpoint: {limit, used, remaining, overLimit}. */
+  usage() {
+    const data = this.get_('/usage', {});
+    const limit = Number(data.credit_limit);
+    const used = Number(data.credits_used);
+    if (!Number.isFinite(limit) || !Number.isFinite(used)) throw new Error('/usage returned no credit_limit or credits_used');
+    return {limit, used, remaining: limit - used, overLimit: Boolean(data.is_over_limit)};
   }
 
   /**
