@@ -29,7 +29,7 @@ fixtures replies. It doesn't try to cover every contractor.
 |---|---|---|
 | Ingestion | Done (Apps Script). Run by hand from the editor with approval; no trigger yet | `gas/src/`, writes the leads tab. See `docs/ingestion.md` |
 | Send email | Done (JJ-12). Real contractors emailed | `gas/src/send.js`. Fills the hand-edited `template` tab and sends via `GmailApp`; runs only when the kill switch says "yes" |
-| Bounces | Built and pushed (JJ-23), tested offline; not run live yet | `gas/src/bounces.js`. Skips domains with no MX record before sending; `checkBounces()` matches Gmail bounce notices to leads. Both write `email_success` |
+| Bounces | Done (JJ-23). Verified live: `checkBounces()` marked the first real bounce | `gas/src/bounces.js`. Skips domains with no MX record before sending; `checkBounces()` matches Gmail bounce notices to leads. Both write `email_success` |
 | Tracking | Not started | Apps Script + Google Sheet. Records sent emails and marks replies. Also a kill switch that stops everything when someone replies, or when the user pulls it to apply what they've learned |
 | Scheduling | Not started | Apps Script time-based triggers |
 
