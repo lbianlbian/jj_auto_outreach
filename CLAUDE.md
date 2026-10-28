@@ -33,7 +33,8 @@ fixtures replies. It doesn't try to cover every contractor.
 | Tracking | Not started | Apps Script + Google Sheet. Records sent emails and marks replies. Also a kill switch that stops everything when someone replies, or when the user pulls it to apply what they've learned |
 | Scheduling | Not started | Apps Script time-based triggers |
 
-**Next step:** the kill switch in every stage (JJ-13), then reply tracking (JJ-14). Linear has the current task
+**Next step:** reply tracking (JJ-14). The kill switch (JJ-13) gates both entry points:
+`runIngestion()` makes no Shovels calls unless it says "yes", and sending checks it too. Linear has the current task
 list and order. See Linear below.
 
 ## Linear (task tracking)

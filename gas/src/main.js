@@ -15,8 +15,8 @@ function setup() {
 const MAX_EMAILS_PER_RUN = 20;
 
 /**
- * LIVE: spends Shovels credits (1 per contractor returned, up to maxContractors), then
- * emails the new leads (and any unsent ones) if the kill switch says "yes".
+ * LIVE: if the kill switch says "yes", spends Shovels credits (1 per contractor returned,
+ * up to maxContractors), then emails the new leads (and any unsent ones).
  * Only run it with the user's approval. Don't put it on a trigger until the credit guard
  * exists (see the hard rules in CLAUDE.md).
  */
@@ -27,10 +27,23 @@ function runIngestion() {
   const spreadsheet = openSpreadsheet(SpreadsheetApp, properties);
   const client = new ShovelsClient(apiKey, urlFetch_, ms => Utilities.sleep(ms));
   const today = Utilities.formatDate(new Date(), spreadsheet.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+  const leads = ingest_(spreadsheet, client, today);
+  if (leads) sendPending_(spreadsheet, leads);
+}
+
+/**
+ * Fetch new leads into the leads tab and return them, or return null without a single
+ * Shovels call when the kill switch isn't "yes". Takes no Google services, so tests can run it.
+ */
+function ingest_(spreadsheet, client, today, states = US_STATES) {
+  if (!outreachEnabled(spreadsheet)) {
+    console.log('kill switch is not "yes": no Shovels calls, no emails sent');
+    return null;
+  }
   const searchLog = loadSearchLog(spreadsheet);
   let leads = [];
   try {
-    leads = fetchLeads(client, US_STATES, {
+    leads = fetchLeads(client, states, {
       today: today,
       blocklist: loadBlocklist(spreadsheet),
       knownLeads: loadLeads(spreadsheet),
@@ -49,7 +62,7 @@ function runIngestion() {
     console.log(`wrote ${leads.length} leads; credits used: ${client.creditsUsed}, ` +
                 `remaining: ${client.creditsRemaining}`);
   }
-  sendPending_(spreadsheet, leads);
+  return leads;
 }
 
 /** LIVE: emails every lead in the leads tab with a blank emailed_at. No Shovels calls. */

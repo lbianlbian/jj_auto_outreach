@@ -1,7 +1,7 @@
 // fetchLeads against a fake Shovels API (no network, no credits).
 const test = require('node:test');
 const {loadGas, plain, assert} = require('./gas');
-const {FakeShovels} = require('./fakes');
+const {FakeShovels, FakeSpreadsheetApp, FakeProperties} = require('./fakes');
 
 const TODAY = '2026-10-21';
 
@@ -276,4 +276,24 @@ test('client refuses a page size below 1 instead of sending it', () => {
   const {gas} = setup();
   const client = new gas.ShovelsClient('k', () => assert.fail('should not fetch'));
   assert.throws(() => client.searchContractorsPage('CA', '2026-10-11', '2026-10-11', 0, null), /at least 1/);
+});
+
+test('kill switch: ingestion makes no Shovels calls unless it says "yes"', () => {
+  const {gas, api} = setup();
+  const ss = gas.setupSheets(new FakeSpreadsheetApp(), new FakeProperties()).spreadsheet;
+  const ingest = () => gas.ingest_(ss, new gas.ShovelsClient('test-key', api.fetch), TODAY, ['CA']);
+  const killSwitch = ss.getSheetByName('kill_switch').getRange(2, 1);
+
+  for (const value of ['no', '', 'stop']) {  // "no" is the seeded value
+    killSwitch.setValues([[value]]);
+    assert.equal(ingest(), null, `"${value}"`);
+  }
+  assert.equal(api.calls.length, 0);  // not even the free coverage calls
+  assert.deepEqual(gas.loadLeads(ss), []);
+  assert.deepEqual(gas.loadSearchLog(ss), {});
+
+  killSwitch.setValues([['yes']]);
+  const leads = ingest();
+  assert.ok(api.billed > 0 && leads.length > 0);
+  assert.deepEqual(gas.loadLeads(ss).map(r => r.contractor_id), leads.map(l => l.contractor_id));
 });
