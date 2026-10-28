@@ -102,7 +102,7 @@ test('through the Sheet: sent rows are marked and a second run sends nothing', (
   const {gas, ss, send, outbox} = fresh();
   const sheet = ss.getSheetByName('leads');
   gas.appendLeads(ss, [lead('C01'), lead('C02'), lead('C03')]);
-  sheet.getRange(3, 1, 1, 6).setValues([['', '', '', '', '', '']]);  // a blank row someone left in the middle
+  sheet.getRange(3, 1, 1, 7).setValues([['', '', '', '', '', '', '']]);  // a blank row someone left in the middle
   const run = () => send(gas.pendingLeads(gas.loadLeads(ss), []), {
     onSent: s => gas.markEmailed(ss, s.contractor_id, s.emailed_at, s.thread_id),
   });
@@ -112,9 +112,9 @@ test('through the Sheet: sent rows are marked and a second run sends nothing', (
 
   assert.equal(outbox.length, 2);
   assert.deepEqual(sheet.rows().slice(1), [
-    ['C01', '2026-10-27 09:00', 'Shop C01', 'thread-1', '', 'c01@shop.com'],
-    ['', '', '', '', '', ''],
-    ['C03', '2026-10-27 09:01', 'Shop C03', 'thread-2', '', 'c03@shop.com'],
+    ['C01', '2026-10-27 09:00', 'Shop C01', 'thread-1', '', '', 'c01@shop.com'],
+    ['', '', '', '', '', '', ''],
+    ['C03', '2026-10-27 09:01', 'Shop C03', 'thread-2', '', '', 'c03@shop.com'],
   ]);
 });
 

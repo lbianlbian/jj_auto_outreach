@@ -104,14 +104,15 @@ test('leads round-trip by header name, even after columns are moved by hand', ()
                         project_type: 'remodel', emailed_at: '2026-10-21T09:00:00'},
                        {contractor_id: 'C02', name: 'Shop 2', email: 'x2@shop2.com'}]);
 
-  assert.deepEqual(sheet.rows()[0], ['emailed_at', 'contractor_id', 'name', 'thread_id', 'zip_code', 'email']);
+  assert.deepEqual(sheet.rows()[0], ['emailed_at', 'contractor_id', 'name', 'thread_id', 'zip_code', 'email_success', 'email']);
   // Leading zero kept: written as plain text, not a number.
-  assert.deepEqual(sheet.rows()[1], ['2026-10-21T09:00:00', 'C01', 'Shop 1', '', '01234', 'x1@shop1.com']);
+  assert.deepEqual(sheet.rows()[1], ['2026-10-21T09:00:00', 'C01', 'Shop 1', '', '01234', '', 'x1@shop1.com']);
   assert.ok(sheet.formats.every(f => f.format === '@'));  // plain text: no date or number guessing
   assert.deepEqual(gas.loadLeads(ss), [
     {emailed_at: '2026-10-21T09:00:00', contractor_id: 'C01', name: 'Shop 1', thread_id: '', zip_code: '01234',
-     email: 'x1@shop1.com'},
-    {emailed_at: '', contractor_id: 'C02', name: 'Shop 2', thread_id: '', zip_code: '', email: 'x2@shop2.com'},
+     email_success: '', email: 'x1@shop1.com'},
+    {emailed_at: '', contractor_id: 'C02', name: 'Shop 2', thread_id: '', zip_code: '', email_success: '',
+     email: 'x2@shop2.com'},
   ]);
 });
 

@@ -50,25 +50,30 @@ function fillTemplate(template, lead) {
 /**
  * Leads-tab rows still to email (blank emailed_at), each merged with the same lead from
  * this run's fetchLeads when there is one, so the template gets its state, city and
- * project type. Rows from earlier runs go out with the slot fallbacks.
+ * project type. Rows from earlier runs go out with the slot fallbacks. Rows whose address
+ * is known not to work (email_success "no") are never retried.
  */
 function pendingLeads(rows, freshLeads) {
   const fresh = {};
   (freshLeads || []).forEach(lead => { fresh[lead.contractor_id] = lead; });
-  return rows.filter(row => row.contractor_id && row.email && !row.emailed_at)
+  return rows.filter(row => row.contractor_id && row.email && !row.emailed_at && row.email_success !== 'no')
     .map(row => Object.assign({}, fresh[row.contractor_id] || {}, row));
 }
 
 /**
  * Email each lead, up to maxEmails, skipping any the blocklist now catches (it may have
  * been edited since the lead was found). mailer(to, subject, body) sends and returns the
- * Gmail thread ID. Returns {sent: [{contractor_id, emailed_at, thread_id}], blocked: [ids]}.
+ * Gmail thread ID. Optional mailServer(domain) is hasMailServer() bound to a fetch: a lead
+ * whose domain gets false isn't sent and is passed to onUndeliverable.
+ * Returns {sent: [{contractor_id, emailed_at, thread_id}], blocked: [ids], undeliverable: [ids]}.
  */
 function sendEmails(leads, template, blocklist, mailer, options) {
-  const {now, maxEmails, onSent} = options;
+  const {now, maxEmails, onSent, mailServer, onUndeliverable} = options;
   checkTemplate(template);  // before any send, so a bad template sends nothing
   const sent = [];
   const blocked = [];
+  const undeliverable = [];
+  const servers = {};  // domain -> mailServer's answer, so each domain is looked up once a run
   for (const lead of leads) {
     if (lead.emailed_at) continue;
     if (sent.length >= maxEmails) break;
@@ -76,18 +81,30 @@ function sendEmails(leads, template, blocklist, mailer, options) {
       blocked.push(lead.contractor_id);
       continue;
     }
+    if (mailServer) {
+      const domain = emailDomain_(lead.email);
+      if (!(domain in servers)) servers[domain] = mailServer(domain);
+      if (servers[domain] === false) {
+        undeliverable.push(lead.contractor_id);
+        if (onUndeliverable) onUndeliverable(lead.contractor_id);
+        continue;
+      }
+    }
     const email = fillTemplate(template, lead);
     const record = {contractor_id: lead.contractor_id, emailed_at: now(),
                     thread_id: mailer(lead.email, email.subject, email.body)};
     if (onSent) onSent(record);
     sent.push(record);
   }
-  return {sent, blocked};
+  return {sent, blocked, undeliverable};
 }
 
 function blockedLead_(lead, blocklist) {
-  const domain = String(lead.email).split('@').pop().trim().toLowerCase();
-  return blocklist.blocksCompany({business_name: lead.name}) || blocklist.emailDomains.has(domain);
+  return blocklist.blocksCompany({business_name: lead.name}) || blocklist.emailDomains.has(emailDomain_(lead.email));
+}
+
+function emailDomain_(email) {
+  return String(email).split('@').pop().trim().toLowerCase();
 }
 
 /** "SAN LUIS OBISPO" -> "San Luis Obispo". Shovels addresses are often all caps. */

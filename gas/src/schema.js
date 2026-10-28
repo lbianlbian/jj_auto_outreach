@@ -15,8 +15,10 @@ const SCHEMA = {
   // Leads, and the "don't contact again" list: ingestion skips any contractor_id or email
   // already here. Kept minimal on purpose; anything else can be looked up in Shovels by id.
   // zip_code is the contractor's address, to match a later order that never replied to the email.
+  // email_success: blank until checked, "no" if the domain takes no mail or the email bounced,
+  // "yes" if it was sent and no bounce has come back (see bounces.js).
   leads: {
-    columns: ['contractor_id', 'emailed_at', 'name', 'thread_id', 'zip_code', 'email'],
+    columns: ['contractor_id', 'emailed_at', 'name', 'thread_id', 'zip_code', 'email_success', 'email'],
   },
   // Days already searched per state, as inclusive date ranges. A state with no data gets
   // a row with blank start/end so searched_at still rotates it to the back.
@@ -76,7 +78,7 @@ const SCHEMA = {
   },
   // One cell, A2: "yes" lets automatic outreach run, anything else stops it. Starts at "no"
   // so nothing runs on its own until it's turned on by hand. Sending checks it (outreachEnabled);
-  // flipping it automatically on a reply is JJ-13.
+  // flipping it automatically on a reply is JJ-22.
   kill_switch: {
     columns: ['Continue automatic outreach?'],
     seed: {'Continue automatic outreach?': ['no']},

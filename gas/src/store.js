@@ -34,6 +34,11 @@ function appendLeads(spreadsheet, leads) {
 
 /** Set emailed_at and thread_id on the lead's existing row. Throws if the lead isn't in the tab. */
 function markEmailed(spreadsheet, contractorId, emailedAt, threadId) {
+  updateLead(spreadsheet, contractorId, {emailed_at: emailedAt, thread_id: threadId});
+}
+
+/** Write {column: value} into the lead's existing row. Throws if the lead isn't in the tab. */
+function updateLead(spreadsheet, contractorId, fields) {
   const sheet = sheet_(spreadsheet, 'leads');
   const header = readHeader(sheet);
   const idCol = header.indexOf('contractor_id');
@@ -41,7 +46,7 @@ function markEmailed(spreadsheet, contractorId, emailedAt, threadId) {
   const ids = sheet.getLastRow() > 1 ? sheet.getRange(2, idCol + 1, sheet.getLastRow() - 1, 1).getValues() : [];
   const index = ids.findIndex(([id]) => String(id).trim() === contractorId);
   if (index === -1) throw new Error(`No lead ${contractorId} in the leads tab.`);
-  [['emailed_at', emailedAt], ['thread_id', threadId]].forEach(([name, value]) => {
+  Object.entries(fields).forEach(([name, value]) => {
     const col = header.indexOf(name);
     if (col === -1) throw new Error(`"leads" tab has no column ${name}: run setup() first.`);
     sheet.getRange(index + 2, col + 1).setNumberFormat('@').setValues([[String(value)]]);

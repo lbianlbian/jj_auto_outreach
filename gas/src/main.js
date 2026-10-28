@@ -70,21 +70,46 @@ function sendTestEmail() {
   console.log(`sent a test email to ${me}`);
 }
 
+/**
+ * Search Gmail for bounce notices from the last 30 days and fill in email_success on the
+ * leads tab: "no" for leads whose email bounced, "yes" for the other emailed leads. Reads
+ * Gmail only and sends nothing, so it ignores the kill switch. Sending runs it first too.
+ */
+function checkBounces() {
+  checkBounces_(openSpreadsheet(SpreadsheetApp, PropertiesService.getScriptProperties()));
+}
+
+function checkBounces_(spreadsheet) {
+  const messages = GmailApp.search(BOUNCE_QUERY, 0, 100).flatMap(thread => thread.getMessages().map(m => ({
+    threadId: thread.getId(), from: m.getFrom(), subject: m.getSubject(),
+    failedRecipients: m.getHeader('X-Failed-Recipients'), body: m.getPlainBody(),
+  })));
+  const result = findBounces(loadLeads(spreadsheet), messages);
+  result.bounced.forEach(id => updateLead(spreadsheet, id, {email_success: 'no'}));
+  result.delivered.forEach(id => updateLead(spreadsheet, id, {email_success: 'yes'}));
+  console.log(`bounces: ${result.bounced.length ? result.bounced.join(', ') : 'none new'}; ` +
+              `marked delivered: ${result.delivered.length}`);
+}
+
 /** Email pending leads, marking each row as soon as its email goes out. freshLeads fill the slots. */
 function sendPending_(spreadsheet, freshLeads) {
   if (!outreachEnabled(spreadsheet)) {
     console.log('kill switch is not "yes": no emails sent');
     return;
   }
+  checkBounces_(spreadsheet);  // catches the last run's bounces
   const tz = spreadsheet.getSpreadsheetTimeZone();
   const result = sendEmails(pendingLeads(loadLeads(spreadsheet), freshLeads), loadTemplate(spreadsheet),
                             loadBlocklist(spreadsheet), gmailSend_, {
     now: () => Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm'),
     maxEmails: MAX_EMAILS_PER_RUN,
     onSent: sent => markEmailed(spreadsheet, sent.contractor_id, sent.emailed_at, sent.thread_id),
+    mailServer: domain => hasMailServer(urlFetch_, domain),
+    onUndeliverable: id => updateLead(spreadsheet, id, {email_success: 'no'}),
   });
   console.log(`sent ${result.sent.length} emails` +
-              (result.blocked.length ? `; blocklisted, not sent: ${result.blocked.join(', ')}` : ''));
+              (result.blocked.length ? `; blocklisted, not sent: ${result.blocked.join(', ')}` : '') +
+              (result.undeliverable.length ? `; no mail server, not sent: ${result.undeliverable.join(', ')}` : ''));
 }
 
 /** Send a plain-text email and return its Gmail thread ID (sendEmail() returns nothing). */

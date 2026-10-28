@@ -28,7 +28,8 @@ fixtures replies. It doesn't try to cover every contractor.
 | Stage | State | Where |
 |---|---|---|
 | Ingestion | Done (Apps Script). Run by hand from the editor with approval; no trigger yet | `gas/src/`, writes the leads tab. See `docs/ingestion.md` |
-| Send email | Done (JJ-12). Test send verified; no real contractor emailed yet | `gas/src/send.js`. Fills the hand-edited `template` tab and sends via `GmailApp`; runs only when the kill switch says "yes" |
+| Send email | Done (JJ-12). Real contractors emailed | `gas/src/send.js`. Fills the hand-edited `template` tab and sends via `GmailApp`; runs only when the kill switch says "yes" |
+| Bounces | Built and pushed (JJ-23), tested offline; not run live yet | `gas/src/bounces.js`. Skips domains with no MX record before sending; `checkBounces()` matches Gmail bounce notices to leads. Both write `email_success` |
 | Tracking | Not started | Apps Script + Google Sheet. Records sent emails and marks replies. Also a kill switch that stops everything when someone replies, or when the user pulls it to apply what they've learned |
 | Scheduling | Not started | Apps Script time-based triggers |
 
@@ -158,7 +159,7 @@ before relying on the names above.
 docs/                 proposal.md, technical_spec.md, plan.md, sheets.md, ingestion.md (see Ownership of docs)
 shovels_executable/   vendored Shovels CLI binary (gitignored) and its README
 gas/                  Apps Script project: clasp root, package.json (npm test)
-  src/                pushed by clasp: schema, setup, store, filters, client, leads, send, main (entry points), appsscript.json
+  src/                pushed by clasp: schema, setup, store, filters, client, leads, send, bounces, main (entry points), appsscript.json
   test/               Node tests (never pushed). gas.js loads src/ into one shared scope like GAS; fakes.js
 ```
 All `src/` files share one global scope, as in Apps Script, so nothing is imported or
@@ -176,3 +177,5 @@ folders later; `test/gas.js` only loads top-level files today.
 - Reply tracking (JJ-14) can use the `thread_id` that sending saves on each lead row. The
   template asks people to reply "no thanks" to opt out, so any reply must stop further
   emails to that lead, including follow-ups (JJ-16).
+  Bounce notices are not replies: reply tracking must skip what `findBounces()` treats as a
+  bounce, and follow-ups must skip leads with `email_success` "no".

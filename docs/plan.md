@@ -15,10 +15,11 @@ This document is to stay human-written and a source for agents to connect to the
 - set up clasp
 - Refactor ingestion/ to use google apps script
 - set up email sending functionality (includes making the email template)
+- bad emails check: flag if email address was discovered to be bad after sending or if dns lookup on domain shows issues don't count as discovered email just put in blocklist
 
 ## Next Up
 - set up google apps script cron job
-- set up kill switch
+- set up kill switch, both on ingesting emails and sending them
 - set up tracking email sent functionality
 - set up html dashboard
 
