@@ -15,12 +15,12 @@ This document is to stay human-written and a source for agents to connect to the
 - set up clasp
 - Refactor ingestion/ to use google apps script
 - set up email sending functionality (includes making the email template)
-- bad emails check: flag if email address was discovered to be bad after sending or if dns lookup on domain shows issues don't count as discovered email just put in blocklist
+- bad emails check: flag if email address was discovered to be bad after sending or if dns lookup on domain shows issues 
+- set up kill switch, both on ingesting emails and sending them
 
 ## Next Up
 - set up google apps script cron job
-- set up kill switch, both on ingesting emails and sending them
-- set up tracking email sent functionality
+- set up tracking email replies
 - set up html dashboard
 
 ## Potential future work
@@ -30,3 +30,4 @@ This document is to stay human-written and a source for agents to connect to the
 - dynamically improve email template based on previous responses and data with AI
 - enable terminal runs of GAS by setting up google cloud project optional
 - automatically stop outreach/add to blocklist when someone replies to opt out
+- maybe observability on credits running out either with dashboard of remaining credits or automatic emails
