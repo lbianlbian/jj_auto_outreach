@@ -17,10 +17,10 @@ This document is to stay human-written and a source for agents to connect to the
 - set up email sending functionality (includes making the email template)
 - bad emails check: flag if email address was discovered to be bad after sending or if dns lookup on domain shows issues 
 - set up kill switch, both on ingesting emails and sending them
+- set up google apps script cron job
 
 ## Next Up
-- set up google apps script cron job
-- set up tracking email replies
+- set up tracking replies to my outreach emails
 - set up html dashboard
 
 ## Potential future work

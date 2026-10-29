@@ -31,10 +31,9 @@ fixtures replies. It doesn't try to cover every contractor.
 | Send email | Done (JJ-12). Real contractors emailed | `gas/src/send.js`. Fills the hand-edited `template` tab and sends via `GmailApp`; runs only when the kill switch says "yes" |
 | Bounces | Done (JJ-23). Verified live: `checkBounces()` marked the first real bounce | `gas/src/bounces.js`. Skips domains with no MX record before sending; `checkBounces()` matches Gmail bounce notices to leads. Both write `email_success` |
 | Tracking | Not started | Apps Script + Google Sheet. Records sent emails and marks replies. Also a kill switch that stops everything when someone replies, or when the user pulls it to apply what they've learned |
-| Scheduling | Built (JJ-20); triggers not installed yet | `gas/src/daily.js`. `dailyRun()` = kill switch → bounce check → credit guard → ingestion → send → `run_log` row. `setupTriggers()` schedules it weekdays 7–8am PT |
+| Scheduling | Done (JJ-20). Triggers installed; verified live: a run completed and logged | `gas/src/daily.js`. `dailyRun()` = kill switch → bounce check → credit guard → ingestion → send → `run_log` row. `setupTriggers()` schedules it weekdays 7–8am PT |
 
-**Next step:** the user runs `setupTriggers()` (new `script.scriptapp` consent), then reply
-tracking (JJ-14). The kill switch (JJ-13) gates every entry point: `dailyRun()` makes no
+**Next step:** reply tracking (JJ-14). The kill switch (JJ-13) gates every entry point: `dailyRun()` makes no
 Shovels calls unless it says "yes", and sending checks it too. Linear has the current task
 list and order. See Linear below.
 
