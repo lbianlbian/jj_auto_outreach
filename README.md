@@ -11,11 +11,11 @@ See docs/proposal.md and docs/technical_spec.md note that infrastructure related
 ## Ingestion
 Using the shovels.ai API, the code here finds the emails of 10 electricians who recently filed an electric permit and have not already been found. Saved in leads sheet, make it its own subfolder next time
 
-## Send email (coming soon)
-New directory would handle this, Uses a template that can also be edited by a human. 
+## Send email
+Uses a template that can also be edited by a human. Also checks email validity first. 
 
-## Tracking (coming soon)
-Code for tracking emails that have been sent and for updating emails as responded. Also planning some sort of kill switch for everything if someone responds or to pull at my discretion to update the system with new learnings. 
+## Tracking
+Code for logging emails that have been sent. Also tracks if email bounced. There is also a kill switch to pull at my discretion to update the system with new learnings. 
 
 clasp which is google apps script's cli will be used for development
 
@@ -26,3 +26,5 @@ Switching infrastructure from original render.com plan to google apps script nat
 - for course, practicing google apps script development with agentic tools when i previously never used agentic tools with GAS is good
 
 #### Tasks/progress are tracked in Linear and Linear should be updated as things are done or new things to do are added. 
+
+See dashboard: https://script.google.com/macros/s/AKfycbzttfPqnnnXb2tb15BGEfOeQr5R-T-1cA0y2Hi4Shh3xWs1zCyYabB_i7jF5Lmn6-Pg/exec?key={secret key here}

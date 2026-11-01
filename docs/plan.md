@@ -18,16 +18,18 @@ This document is to stay human-written and a source for agents to connect to the
 - bad emails check: flag if email address was discovered to be bad after sending or if dns lookup on domain shows issues 
 - set up kill switch, both on ingesting emails and sending them
 - set up google apps script cron job
-
-## Next Up
-- set up tracking replies to my outreach emails
 - set up html dashboard
 
+## Next Up
+
 ## Potential future work
-- automatically follow up on unanswered emails
+- research getting street address of permit to make sure email is recognized (contractors may have multiple jobs going on) would have to say "I looked at public data" to avoid creepiness
+- research potentially sending emails a longer time period after the permit was pulled because lighting fixtures may be bought near the end of the job, not the beginning
+- set up tracking replies to my outreach emails and automatically follow up on unanswered emails
 - filter shovels.ai responses to verify electricians are actually electricians based on company name
 - email open tracker
 - dynamically improve email template based on previous responses and data with AI
 - enable terminal runs of GAS by setting up google cloud project optional
 - automatically stop outreach/add to blocklist when someone replies to opt out
-- maybe observability on credits running out either with dashboard of remaining credits or automatic emails
+- automatic emails when credits are about to run out
+- kill switch functionality in dashboard

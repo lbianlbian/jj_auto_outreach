@@ -27,4 +27,4 @@ human readable and should stay very simple no agent changes although suggest if 
 
 ## run_log
 - records the runs that were made and what happened, also includes skipped runs when kill switch was on
-- cols: ran_at, ingested, credits_used, credits_remaining, leads, emails_sent
+- cols: ran_at, ingested, credits_used, credits_remaining, leads, emails_sent, note(blank for normal run, states issue if run didn't go right)

@@ -30,10 +30,12 @@ fixtures replies. It doesn't try to cover every contractor.
 | Ingestion | Done (Apps Script). Runs inside `dailyRun()` behind the credit guard |  `gas/src/`, writes the leads tab. See `docs/ingestion.md` |
 | Send email | Done (JJ-12). Real contractors emailed | `gas/src/send.js`. Fills the hand-edited `template` tab and sends via `GmailApp`; runs only when the kill switch says "yes" |
 | Bounces | Done (JJ-23). Verified live: `checkBounces()` marked the first real bounce | `gas/src/bounces.js`. Skips domains with no MX record before sending; `checkBounces()` matches Gmail bounce notices to leads. Both write `email_success` |
-| Tracking | Not started | Apps Script + Google Sheet. Records sent emails and marks replies. Also a kill switch that stops everything when someone replies, or when the user pulls it to apply what they've learned |
+| Tracking | Sent emails: done (JJ-12 writes `emailed_at`, `thread_id`). Kill switch: done (JJ-13). Reply tracking: Backlog (JJ-14), since no one has replied yet; the user watches the inbox by hand | Apps Script + Google Sheet |
+| Dashboard | Done (JJ-15). Verified live: the shared `/exec?key=` link works |  `gas/src/dashboard.js`. `doGet()` serves a read-only summary of the Sheet as the Apps Script web app, public behind a `?key=` link |
 | Scheduling | Done (JJ-20). Triggers installed; verified live: a run completed and logged | `gas/src/daily.js`. `dailyRun()` = kill switch → bounce check → credit guard → ingestion → send → `run_log` row. `setupTriggers()` schedules it weekdays 7–8am PT |
 
-**Next step:** reply tracking (JJ-14). The kill switch (JJ-13) gates every entry point: `dailyRun()` makes no
+**Next step:** none picked; `docs/plan.md` has nothing in Next Up. Ask the user which
+Backlog item comes next. Reply tracking (JJ-14) and follow-ups (JJ-16) wait until someone replies. The kill switch (JJ-13) gates every entry point: `dailyRun()` makes no
 Shovels calls unless it says "yes", and sending checks it too. Linear has the current task
 list and order. See Linear below.
 
@@ -109,7 +111,8 @@ shovels_executable/shovels.exe <cmd> --dry-run     # exact HTTP request, free
 # Apps Script (run from gas/)
 npm test                                           # Node tests for src/; offline, no credits
 clasp push --force                                 # local files -> GAS project (--force skips the manifest prompt)
-clasp deploy -i <deploymentId>                     # update existing deployment, same URL
+clasp update-deployment AKfycbzttfPqnnnXb2tb15BGEfOeQr5R-T-1cA0y2Hi4Shh3xWs1zCyYabB_i7jF5Lmn6-Pg -d "<what changed>"
+                                                   # point the dashboard web app at the pushed code, same /exec URL
 clasp open                                         # open the script in the editor
 ```
 Windows machine, Node 22. Functions run from the Apps Script editor (the user clicks
@@ -145,7 +148,10 @@ before relying on the names above.
   and have the user run it in the same editor step.
 - **Deploy to the existing deployment** (`-i <deploymentId>`) so the `/exec` URL doesn't
   change. Never create a new deployment unless asked. A web app deployed as "Anyone"
-  must check a shared secret from Script Properties in the request body.
+  must check a shared secret from Script Properties in the request. The dashboard is
+  deployed as "Anyone, even anonymous" and `doGet()` checks `?key=` against `DASHBOARD_KEY`
+  (`setup()` makes the key once and logs the share link; `resetDashboardKey()` revokes old links). Any
+  future POST handler (e.g. a kill-switch button) must check a secret in the request body.
 - The leads and search_log tabs are written by the script; the blocklist and kill_switch
   tabs are edited by hand. Add bad domains and companies to the blocklist tab (the seed
   list in `schema.js` only applies when the tab is first created).
@@ -162,7 +168,7 @@ before relying on the names above.
 docs/                 proposal.md, technical_spec.md, plan.md, sheets.md, ingestion.md (see Ownership of docs)
 shovels_executable/   vendored Shovels CLI binary (gitignored) and its README
 gas/                  Apps Script project: clasp root, package.json (npm test)
-  src/                pushed by clasp: schema, setup, store, filters, client, leads, send, bounces, main (entry points), appsscript.json
+  src/                pushed by clasp: schema, setup, store, filters, client, leads, send, bounces, daily, dashboard, main (entry points), appsscript.json
   test/               Node tests (never pushed). gas.js loads src/ into one shared scope like GAS; fakes.js
 ```
 All `src/` files share one global scope, as in Apps Script, so nothing is imported or

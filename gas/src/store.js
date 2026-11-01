@@ -53,6 +53,11 @@ function updateLead(spreadsheet, contractorId, fields) {
   });
 }
 
+/** Every run_log row, oldest first, keyed by column name. */
+function loadRunLog(spreadsheet) {
+  return readRows_(sheet_(spreadsheet, 'run_log'));
+}
+
 /** Add one row (from runDaily_) to the bottom of the run_log tab. */
 function appendRunLog(spreadsheet, row) {
   const sheet = sheet_(spreadsheet, 'run_log');

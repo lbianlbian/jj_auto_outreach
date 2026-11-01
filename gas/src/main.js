@@ -4,11 +4,29 @@
  * as arguments so the Node tests can pass fakes.
  */
 
-/** Create the spreadsheet if needed and add any missing tabs and columns. Safe to rerun. */
+/**
+ * Create the spreadsheet if needed and add any missing tabs and columns, make the
+ * dashboard key if there isn't one, and log both links. Safe to rerun.
+ */
 function setup() {
-  const result = setupSheets(SpreadsheetApp, PropertiesService.getScriptProperties());
+  const properties = PropertiesService.getScriptProperties();
+  const result = setupSheets(SpreadsheetApp, properties);
   console.log(result.changes.length ? result.changes.join('\n') : 'already up to date');
   console.log(`spreadsheet: ${result.spreadsheet.getUrl()}`);
+  logDashboardLink_(ensureDashboardKey(properties, () => Utilities.getUuid()));
+}
+
+/** Replace the dashboard key: every link shared so far stops working. Logs the new link. */
+function resetDashboardKey() {
+  const key = Utilities.getUuid();
+  PropertiesService.getScriptProperties().setProperty(DASHBOARD_KEY_PROPERTY, key);
+  logDashboardLink_(key);
+}
+
+function logDashboardLink_(key) {
+  const url = ScriptApp.getService().getUrl();
+  console.log(url ? `dashboard (anyone with this link can view): ${url}?key=${key}`
+                  : 'dashboard: no web app deployment yet, so no link');
 }
 
 // Most emails one run sends: today's new leads plus a backlog of unsent rows.
@@ -58,6 +76,29 @@ function setupTriggers() {
 /** Delete the dailyRun triggers. The kill switch also stops runs without touching triggers. */
 function removeTriggers() {
   console.log(`removed ${removeTriggers_(ScriptApp)} trigger(s)`);
+}
+
+/**
+ * The web app: the read-only dashboard (dashboard.js). Deployed for "Anyone, even
+ * anonymous", so it shows only when the URL has the right ?key= (setup() logs the link).
+ * Reads the Sheet only: no Shovels calls, no email.
+ */
+function doGet(e) {
+  const properties = PropertiesService.getScriptProperties();
+  if (!dashboardKeyMatches(e && e.parameter, properties)) {
+    return HtmlService.createHtmlOutput('<!doctype html><p>Not found.</p>').setTitle('Not found');
+  }
+  let html;
+  try {
+    const spreadsheet = openSpreadsheet(SpreadsheetApp, properties);
+    const today = Utilities.formatDate(new Date(), spreadsheet.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+    html = renderDashboard(dashboardData(spreadsheet, today));
+  } catch (e) {
+    html = `<!doctype html><p>The dashboard couldn't load: ${escapeHtml_(e.message)}</p>`;
+  }
+  return HtmlService.createHtmlOutput(html)
+    .setTitle('JoJoSpring outreach')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 /** LIVE: emails every lead in the leads tab with a blank emailed_at. No Shovels calls. */
