@@ -1,4 +1,4 @@
-// Load src/*.js the way Apps Script does: every file in one shared global scope.
+// Load src/**/*.js the way Apps Script does: every file in one shared global scope.
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -9,7 +9,9 @@ const SRC = path.join(__dirname, '..', 'src');
 /** A fresh copy of the Apps Script globals. gas.fetchLeads, gas.SCHEMA, etc. */
 function loadGas() {
   const context = vm.createContext({console: {log() {}, warn() {}, error: console.error}});
-  for (const file of fs.readdirSync(SRC).filter(f => f.endsWith('.js')).sort()) {
+  // Subfolders too: clasp pushes them as `folder/file`, still in the one global scope.
+  const files = fs.readdirSync(SRC, {recursive: true}).map(f => f.split(path.sep).join('/'));
+  for (const file of files.filter(f => f.endsWith('.js')).sort()) {
     vm.runInContext(fs.readFileSync(path.join(SRC, file), 'utf8'), context, {filename: file});
   }
   // Top-level const/class aren't properties of the context, so look names up by evaluating them.

@@ -19,7 +19,7 @@ fixtures replies. It doesn't try to cover every contractor.
   and lead filters. Read it before touching ingestion. Agents maintain it: keep it in step
   with `gas/src/` and add new findings from live runs.
 - `docs/sheets.md` describes the Sheet's tabs and columns. It's the user's; don't edit it,
-  but suggest changes. `gas/src/schema.js` mirrors it.
+  but suggest changes. `gas/src/sheet/schema.js` mirrors it.
 - `docs/plan.md` is the human-written task plan that gets turned into Linear tasks. Don't
   edit it unless asked. Suggesting tasks to add, change or remove is welcome.
 
@@ -27,11 +27,11 @@ fixtures replies. It doesn't try to cover every contractor.
 
 | Stage | State | Where |
 |---|---|---|
-| Ingestion | Done (Apps Script). Runs inside `dailyRun()` behind the credit guard |  `gas/src/`, writes the leads tab. See `docs/ingestion.md` |
-| Send email | Done (JJ-12). Real contractors emailed | `gas/src/send.js`. Fills the hand-edited `template` tab and sends via `GmailApp`; runs only when the kill switch says "yes" |
-| Bounces | Done (JJ-23). Verified live: `checkBounces()` marked the first real bounce | `gas/src/bounces.js`. Skips domains with no MX record before sending; `checkBounces()` matches Gmail bounce notices to leads. Both write `email_success` |
+| Ingestion | Done (Apps Script). Runs inside `dailyRun()` behind the credit guard |  `gas/src/sources/shovels/`, writes the leads tab. See `docs/ingestion.md` |
+| Send email | Done (JJ-12). Real contractors emailed | `gas/src/outreach/send.js`. Fills the hand-edited `template` tab and sends via `GmailApp`; runs only when the kill switch says "yes" |
+| Bounces | Done (JJ-23). Verified live: `checkBounces()` marked the first real bounce | `gas/src/outreach/bounces.js`. Skips domains with no MX record before sending; `checkBounces()` matches Gmail bounce notices to leads. Both write `email_success` |
 | Tracking | Sent emails: done (JJ-12 writes `emailed_at`, `thread_id`). Kill switch: done (JJ-13). Reply tracking: Backlog (JJ-14), since no one has replied yet; the user watches the inbox by hand | Apps Script + Google Sheet |
-| Dashboard | Done (JJ-15). Verified live: the shared `/exec?key=` link works |  `gas/src/dashboard.js`. `doGet()` serves a read-only summary of the Sheet as the Apps Script web app, public behind a `?key=` link |
+| Dashboard | Done (JJ-15). Verified live: the shared `/exec?key=` link works |  `gas/src/dashboard/dashboard.js`. `doGet()` serves a read-only summary of the Sheet as the Apps Script web app, public behind a `?key=` link |
 | Scheduling | Done (JJ-20). Triggers installed; verified live: a run completed and logged | `gas/src/daily.js`. `dailyRun()` = kill switch → bounce check → credit guard → ingestion → send → `run_log` row. `setupTriggers()` schedules it weekdays 7–8am PT |
 
 **Next step:** none picked; `docs/plan.md` has nothing in Next Up. Ask the user which
@@ -62,7 +62,7 @@ repo.
   Say which lines need to change.
 
 ## Decisions (don't re-litigate)
-- **The Sheet is declared in code.** `gas/src/schema.js` lists every tab and column and
+- **The Sheet is declared in code.** `gas/src/sheet/schema.js` lists every tab and column and
   mirrors `docs/sheets.md`. `setup()` creates the spreadsheet on its first run, keeps its
   ID in Script Properties (`SPREADSHEET_ID`), and on every run adds any missing tabs or
   columns. It never deletes, renames, reorders or overwrites anything. The store finds
@@ -155,7 +155,7 @@ before relying on the names above.
 - The leads and search_log tabs are written by the script; the blocklist and kill_switch
   tabs are edited by hand. Add bad domains and companies to the blocklist tab (the seed
   list in `schema.js` only applies when the tab is first created).
-- All Sheet access goes through `gas/src/store.js` (`setup.js` builds the Sheet), so the
+- All Sheet access goes through `gas/src/sheet/store.js` (`sheet/setup.js` builds the Sheet), so the
   rest of the code doesn't know where data lives.
 - **Tests must stay offline.** Pass a fetch function and the Google services into the
   logic instead of calling `UrlFetchApp`, `GmailApp` or `SpreadsheetApp` directly, so
@@ -168,14 +168,23 @@ before relying on the names above.
 docs/                 proposal.md, technical_spec.md, plan.md, sheets.md, ingestion.md (see Ownership of docs)
 shovels_executable/   vendored Shovels CLI binary (gitignored) and its README
 gas/                  Apps Script project: clasp root, package.json (npm test)
-  src/                pushed by clasp: schema, setup, store, filters, client, leads, send, bounces, daily, dashboard, main (entry points), appsscript.json
-  test/               Node tests (never pushed). gas.js loads src/ into one shared scope like GAS; fakes.js
+  src/                pushed by clasp
+    main.js           entry points; the only file that touches real Google services
+    daily.js          dailyRun() orchestration, credit guard, trigger schedule
+    appsscript.json
+    sheet/            schema, setup, store: all Sheet access
+    sources/shovels/  client, filters, leads: the Shovels lead source (ingestion)
+    outreach/         send, bounces (later: replies, follow-ups)
+    dashboard/        dashboard: the doGet() web app
+  test/               Node tests (never pushed), flat. gas.js loads src/**/*.js into one shared scope like GAS; fakes.js
 ```
-All `src/` files share one global scope, as in Apps Script, so nothing is imported or
-exported. Keep top-level code to declarations. Tests compare vm-made values through the
-`assert` in `test/gas.js`. clasp also pushes subfolders of `src/` (shown as
-`folder/file` in the editor, still one global scope), so stages could be split into
-folders later; `test/gas.js` only loads top-level files today.
+All `src/` files, in every subfolder, share one global scope, as in Apps Script, so
+nothing is imported or exported and a file's folder doesn't change how it's loaded (clasp
+pushes subfolders as `folder/file`). Keep top-level code to declarations that don't read
+other files' values, because load order across files isn't guaranteed. Tests compare
+vm-made values through the `assert` in `test/gas.js`. Orchestration (`main.js`,
+`daily.js`) stays at the top of `src/`; a new lead source gets its own folder under
+`sources/`.
 
 ## Known gaps relevant to the next stages
 - Rows written before sending existed have no state in the Sheet, so their emails use the

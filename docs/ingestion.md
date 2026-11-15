@@ -16,11 +16,11 @@ It reads `SHOVELS_API_KEY` from Script Properties.
 |---|---|
 | `main.js` | Entry points: `setup()`, `dailyRun()`, `setupTriggers()`, and the `UrlFetchApp` adapter |
 | `daily.js` | `runDaily_()`: kill switch, credit guard, `ingest_()`, sending and the run_log row. Also the trigger schedule |
-| `client.js` | `ShovelsClient`: HTTP, retries, one page of contractor search, coverage counts, credit tracking |
-| `leads.js` | `fetchLeads()`: picking days, state rotation and the credit-saving search loop. Also `US_STATES` |
-| `filters.js` | `Blocklist` and `skipReason()`: which contractors count as leads |
-| `store.js` | Reading and writing the leads, search_log and blocklist tabs |
-| `schema.js`, `setup.js` | The tabs and columns, and `setupSheets()`, which creates them idempotently |
+| `sources/shovels/client.js` | `ShovelsClient`: HTTP, retries, one page of contractor search, coverage counts, credit tracking |
+| `sources/shovels/leads.js` | `fetchLeads()`: picking days, state rotation and the credit-saving search loop. Also `US_STATES` |
+| `sources/shovels/filters.js` | `Blocklist` and `skipReason()`: which contractors count as leads |
+| `sheet/store.js` | Reading and writing the leads, search_log and blocklist tabs |
+| `sheet/schema.js`, `sheet/setup.js` | The tabs and columns, and `setupSheets()`, which creates them idempotently |
 
 | Tab | Written by | Holds |
 |---|---|---|
