@@ -33,6 +33,7 @@ fixtures replies. It doesn't try to cover every contractor.
 | Tracking | Sent emails: done (JJ-12 writes `emailed_at`, `thread_id`). Kill switch: done (JJ-13). Reply tracking: Backlog (JJ-14), since no one has replied yet; the user watches the inbox by hand | Apps Script + Google Sheet |
 | Dashboard | Done (JJ-15). Verified live: the shared `/exec?key=` link works |  `gas/src/dashboard/dashboard.js`. `doGet()` serves a read-only summary of the Sheet as the Apps Script web app, public behind a `?key=` link |
 | Scheduling | Done (JJ-20). Triggers installed; verified live: a run completed and logged | `gas/src/daily.js`. `dailyRun()` = kill switch → bounce check → credit guard → ingestion → send → `run_log` row. `setupTriggers()` schedules it weekdays 7–8am PT |
+| Dry run | Built, tested offline; not yet pushed or run in GAS | `gas/src/dryrun/`. `dryRun()` in GAS, `npm run dry-run` locally. Fakes sit at the `services` boundary (see Hard rules) |
 
 **Next step:** none picked; `docs/plan.md` has nothing in Next Up. Ask the user which
 Backlog item comes next. Reply tracking (JJ-14) and follow-ups (JJ-16) wait until someone replies. The kill switch (JJ-13) gates every entry point: `dailyRun()` makes no
@@ -110,6 +111,8 @@ shovels_executable/shovels.exe <cmd> --dry-run     # exact HTTP request, free
 
 # Apps Script (run from gas/)
 npm test                                           # Node tests for src/; offline, no credits
+npm run dry-run [-- <entry>]                       # the real pipeline on a fake Sheet + fake Shovels/DNS/Gmail; prints
+                                                   # every call, email and Sheet row it would write. Free, offline
 clasp push --force                                 # local files -> GAS project (--force skips the manifest prompt)
 clasp update-deployment AKfycbzttfPqnnnXb2tb15BGEfOeQr5R-T-1cA0y2Hi4Shh3xWs1zCyYabB_i7jF5Lmn6-Pg -d "<what changed>"
                                                    # point the dashboard web app at the pushed code, same /exec URL
@@ -162,6 +165,14 @@ before relying on the names above.
   tests can pass fakes. Only `main.js` touches the real services. When you change how
   leads are paged through, make sure the paging test (`no paid contractor goes unused`)
   still passes, because it catches credit waste.
+- **Every outside effect goes through `services`** (`liveServices_()` in `main.js`:
+  spreadsheet, fetch, sleep, clock, sendMail, searchMail). That boundary is what the dry
+  run fakes, so it stays accurate however the stages change. A new kind of effect gets a
+  key in `liveServices_()` and a fake in `runDry_` (`dryrun/dry_run.js`); a new HTTP host
+  or Shovels endpoint gets a fake route in `dryrun/fake_world.js`; a new entry point gets
+  a line in `DRY_RUN_ENTRIES`. `test/dryrun.test.js` fails if a file other than `main.js`
+  names a Google service, or if any entry point fails its dry run. `dryRun()` in GAS is
+  free and safe (real Sheet copied into memory, nothing sent or billed), so it needs no approval.
 
 ## Layout
 ```
@@ -176,6 +187,8 @@ gas/                  Apps Script project: clasp root, package.json (npm test)
     sources/shovels/  client, filters, leads: the Shovels lead source (ingestion)
     outreach/         send, bounces (later: replies, follow-ups)
     dashboard/        dashboard: the doGet() web app
+    dryrun/           dry_run (runDry_, DRY_RUN_ENTRIES), fake_world (fake Shovels/DNS/mailbox/Sheet), memory_sheet
+  tools/dry-run.js    npm run dry-run (never pushed)
   test/               Node tests (never pushed), flat. gas.js loads src/**/*.js into one shared scope like GAS; fakes.js
 ```
 All `src/` files, in every subfolder, share one global scope, as in Apps Script, so

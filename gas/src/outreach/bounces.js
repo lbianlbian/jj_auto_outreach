@@ -57,6 +57,20 @@ function findBounces(leads, messages) {
   return {bounced, delivered};
 }
 
+/**
+ * Search the mailbox for bounce notices and fill in email_success on the leads tab: "no"
+ * for leads whose email bounced, "yes" for the other emailed leads. services: see
+ * liveServices_ in main.js.
+ */
+function checkBounces_(services) {
+  const spreadsheet = services.spreadsheet;
+  const result = findBounces(loadLeads(spreadsheet), services.searchMail(BOUNCE_QUERY, 100));
+  result.bounced.forEach(id => updateLead(spreadsheet, id, {email_success: 'no'}));
+  result.delivered.forEach(id => updateLead(spreadsheet, id, {email_success: 'yes'}));
+  console.log(`bounces: ${result.bounced.length ? result.bounced.join(', ') : 'none new'}; ` +
+              `marked delivered: ${result.delivered.length}`);
+}
+
 /** Whether text has this exact address, so bob@x.com doesn't match jimbob@x.com. */
 function mentions_(text, email) {
   const escaped = email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

@@ -77,6 +77,11 @@ function outreachEnabled(spreadsheet) {
   return String(values[0][0]).trim().toLowerCase() === 'yes';
 }
 
+/** Set the kill switch cell to "yes" or "no". Used by the dry run's in-memory copy. */
+function setOutreachEnabled(spreadsheet, enabled) {
+  sheet_(spreadsheet, 'kill_switch').getRange(2, 1).setValues([[enabled ? 'yes' : 'no']]);
+}
+
 /** Return {state: {last_searched, days: [searched days]}}, the shape fetchLeads uses. */
 function loadSearchLog(spreadsheet) {
   const log = {};

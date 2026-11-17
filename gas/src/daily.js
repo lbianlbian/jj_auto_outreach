@@ -16,6 +16,21 @@ const DAILY_RUN_DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'];
 const DAILY_RUN_HANDLER = 'dailyRun';
 
 /**
+ * One daily run with the given services (see liveServices_ in main.js; dryRun() passes
+ * fakes). Returns the run_log row.
+ */
+function dailyRunWith_(services) {
+  if (!services.shovelsApiKey) throw new Error('Set the SHOVELS_API_KEY script property first.');
+  const client = new ShovelsClient(services.shovelsApiKey, services.fetch, services.sleep);
+  return runDaily_(services.spreadsheet, client, {
+    today: services.today(),
+    now: services.now,
+    checkBounces: () => checkBounces_(services),
+    send: leads => sendPending_(services, leads),
+  });
+}
+
+/**
  * One run. steps: {today, now(), checkBounces(), send(freshLeads) -> emails sent}.
  * Writes one run_log row whatever happens, including when the kill switch stops it, and
  * returns that row. Errors are logged in the row's note and then rethrown.

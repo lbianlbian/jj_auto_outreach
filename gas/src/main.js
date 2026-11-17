@@ -1,7 +1,7 @@
 /**
  * Entry points run from the Apps Script editor or by triggers. These are the only
  * functions that touch the real Google services; everything they call takes the services
- * as arguments so the Node tests can pass fakes.
+ * as arguments (see liveServices_) so the Node tests and dryRun() can pass fakes.
  */
 
 /**
@@ -29,14 +29,12 @@ function logDashboardLink_(key) {
                   : 'dashboard: no web app deployment yet, so no link');
 }
 
-// Most emails one run sends: today's new leads plus a backlog of unsent rows.
-const MAX_EMAILS_PER_RUN = 20;
-
 /**
  * LIVE: what the weekday trigger runs (see setupTriggers), and the way to run ingestion by
  * hand. If the kill switch says "yes": checks bounces, spends up to RUN_CREDIT_CAP Shovels
  * credits when the free /usage check shows at least MIN_CREDITS_TO_RUN left, then emails
  * the new leads and any unsent ones. Every run, even a skipped one, gets a run_log row.
+ * dryRun() runs the same code against fakes.
  */
 function dailyRun() {
   const lock = LockService.getScriptLock();
@@ -45,22 +43,22 @@ function dailyRun() {
     return;
   }
   try {
-    const properties = PropertiesService.getScriptProperties();
-    const apiKey = properties.getProperty('SHOVELS_API_KEY');
-    if (!apiKey) throw new Error('Set the SHOVELS_API_KEY script property first.');
-    const spreadsheet = openSpreadsheet(SpreadsheetApp, properties);
-    const client = new ShovelsClient(apiKey, urlFetch_, ms => Utilities.sleep(ms));
-    const tz = spreadsheet.getSpreadsheetTimeZone();
-    const log = runDaily_(spreadsheet, client, {
-      today: Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd'),
-      now: () => Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm'),
-      checkBounces: () => checkBounces_(spreadsheet),
-      send: leads => sendPending_(spreadsheet, leads),
-    });
-    console.log(JSON.stringify(log));
+    console.log(JSON.stringify(dailyRunWith_(liveServices_())));
   } finally {
     lock.releaseLock();
   }
+}
+
+/**
+ * FREE, SAFE: dailyRun() with fake Shovels, DNS and Gmail and an in-memory copy of the
+ * Sheet. Logs every action the real run would take: each Shovels call and its credit
+ * cost, each email in full, each Sheet write, then the net change to every tab. Sends
+ * nothing, writes nothing to the real Sheet and spends no credits. If the kill switch
+ * isn't "yes", the copy pretends it is (and says so) so there is something to show.
+ */
+function dryRun() {
+  const live = liveServices_();
+  runDry_(DRY_RUN_ENTRIES.dailyRun, live.spreadsheet, {today: live.today, now: live.now});
 }
 
 /**
@@ -103,7 +101,7 @@ function doGet(e) {
 
 /** LIVE: emails every lead in the leads tab with a blank emailed_at. No Shovels calls. */
 function sendPendingEmails() {
-  sendPending_(openSpreadsheet(SpreadsheetApp, PropertiesService.getScriptProperties()), []);
+  sendPending_(liveServices_(), []);
 }
 
 /**
@@ -111,11 +109,11 @@ function sendPendingEmails() {
  * see what leads get. Works while [placeholders] are still unfilled; ignores the kill switch.
  */
 function sendTestEmail() {
-  const spreadsheet = openSpreadsheet(SpreadsheetApp, PropertiesService.getScriptProperties());
-  const email = fillTemplate(loadTemplate(spreadsheet),
+  const services = liveServices_();
+  const email = fillTemplate(loadTemplate(services.spreadsheet),
                              {name: 'SAMPLE ELECTRIC INC', state: 'CA', city: 'FRESNO', project_type: 'remodel'});
   const me = Session.getEffectiveUser().getEmail();
-  gmailSend_(me, `[TEST] ${email.subject}`, email.body);
+  services.sendMail(me, `[TEST] ${email.subject}`, email.body);
   console.log(`sent a test email to ${me}`);
 }
 
@@ -125,49 +123,50 @@ function sendTestEmail() {
  * Gmail only and sends nothing, so it ignores the kill switch. Sending runs it first too.
  */
 function checkBounces() {
-  checkBounces_(openSpreadsheet(SpreadsheetApp, PropertiesService.getScriptProperties()));
-}
-
-function checkBounces_(spreadsheet) {
-  const messages = GmailApp.search(BOUNCE_QUERY, 0, 100).flatMap(thread => thread.getMessages().map(m => ({
-    threadId: thread.getId(), from: m.getFrom(), subject: m.getSubject(),
-    failedRecipients: m.getHeader('X-Failed-Recipients'), body: m.getPlainBody(),
-  })));
-  const result = findBounces(loadLeads(spreadsheet), messages);
-  result.bounced.forEach(id => updateLead(spreadsheet, id, {email_success: 'no'}));
-  result.delivered.forEach(id => updateLead(spreadsheet, id, {email_success: 'yes'}));
-  console.log(`bounces: ${result.bounced.length ? result.bounced.join(', ') : 'none new'}; ` +
-              `marked delivered: ${result.delivered.length}`);
+  checkBounces_(liveServices_());
 }
 
 /**
- * Email pending leads, marking each row as soon as its email goes out. freshLeads fill the
- * slots. Returns how many were sent.
+ * The real outside world, as the pipeline sees it. Every effect outside this script goes
+ * through one of these, so dryRun() can swap in fakes (src/dryrun/) while the pipeline
+ * code stays the same. A new kind of effect (another API, Slack, a calendar) gets a key
+ * here and a fake in dryrun/services.js, never a direct GmailApp or UrlFetchApp call
+ * elsewhere (test/dryrun.test.js checks that).
+ *   spreadsheet                    the Sheet, read and written only through store.js
+ *   fetch(url, headers)            all HTTP (Shovels, DNS): {status, headers, body}
+ *   sleep(ms)
+ *   today(), now()                 'yyyy-MM-dd' and 'yyyy-MM-dd HH:mm', Sheet time zone
+ *   sendMail(to, subject, body)    sends one email, returns its Gmail thread ID
+ *   searchMail(query, max)         [{threadId, from, subject, failedRecipients, body}]
+ *   shovelsApiKey
  */
-function sendPending_(spreadsheet, freshLeads) {
-  if (!outreachEnabled(spreadsheet)) {
-    console.log('kill switch is not "yes": no emails sent');
-    return 0;
-  }
-  checkBounces_(spreadsheet);  // catches the last run's bounces
+function liveServices_() {
+  const properties = PropertiesService.getScriptProperties();
+  const spreadsheet = openSpreadsheet(SpreadsheetApp, properties);
   const tz = spreadsheet.getSpreadsheetTimeZone();
-  const result = sendEmails(pendingLeads(loadLeads(spreadsheet), freshLeads), loadTemplate(spreadsheet),
-                            loadBlocklist(spreadsheet), gmailSend_, {
+  return {
+    spreadsheet: spreadsheet,
+    fetch: urlFetch_,
+    sleep: ms => Utilities.sleep(ms),
+    today: () => Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd'),
     now: () => Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm'),
-    maxEmails: MAX_EMAILS_PER_RUN,
-    onSent: sent => markEmailed(spreadsheet, sent.contractor_id, sent.emailed_at, sent.thread_id),
-    mailServer: domain => hasMailServer(urlFetch_, domain),
-    onUndeliverable: id => updateLead(spreadsheet, id, {email_success: 'no'}),
-  });
-  console.log(`sent ${result.sent.length} emails` +
-              (result.blocked.length ? `; blocklisted, not sent: ${result.blocked.join(', ')}` : '') +
-              (result.undeliverable.length ? `; no mail server, not sent: ${result.undeliverable.join(', ')}` : ''));
-  return result.sent.length;
+    sendMail: gmailSend_,
+    searchMail: gmailSearch_,
+    shovelsApiKey: properties.getProperty('SHOVELS_API_KEY'),
+  };
 }
 
 /** Send a plain-text email and return its Gmail thread ID (sendEmail() returns nothing). */
 function gmailSend_(to, subject, body) {
   return GmailApp.createDraft(to, subject, body).send().getThread().getId();
+}
+
+/** Every message in the first `max` threads matching a Gmail search. */
+function gmailSearch_(query, max) {
+  return GmailApp.search(query, 0, max).flatMap(thread => thread.getMessages().map(m => ({
+    threadId: thread.getId(), from: m.getFrom(), subject: m.getSubject(),
+    failedRecipients: m.getHeader('X-Failed-Recipients'), body: m.getPlainBody(),
+  })));
 }
 
 /** UrlFetchApp in the shape ShovelsClient expects: {status, headers (lowercased), body}. */

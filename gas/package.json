@@ -3,6 +3,7 @@
   "private": true,
   "description": "Apps Script source (src/, pushed by clasp) and offline Node tests (test/, never pushed)",
   "scripts": {
-    "test": "node --test \"test/*.test.js\""
+    "test": "node --test \"test/*.test.js\"",
+    "dry-run": "node tools/dry-run.js"
   }
 }

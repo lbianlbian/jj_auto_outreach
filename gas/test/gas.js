@@ -6,9 +6,9 @@ const strict = require('node:assert/strict');
 
 const SRC = path.join(__dirname, '..', 'src');
 
-/** A fresh copy of the Apps Script globals. gas.fetchLeads, gas.SCHEMA, etc. */
-function loadGas() {
-  const context = vm.createContext({console: {log() {}, warn() {}, error: console.error}});
+/** A fresh copy of the Apps Script globals. gas.fetchLeads, gas.SCHEMA, etc. options.console replaces the silent one. */
+function loadGas(options = {}) {
+  const context = vm.createContext({console: options.console || {log() {}, warn() {}, error: console.error}});
   // Subfolders too: clasp pushes them as `folder/file`, still in the one global scope.
   const files = fs.readdirSync(SRC, {recursive: true}).map(f => f.split(path.sep).join('/'));
   for (const file of files.filter(f => f.endsWith('.js')).sort()) {

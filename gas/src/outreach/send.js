@@ -4,6 +4,9 @@
  * each send so the lead is marked right away, not at the end of the run.
  */
 
+// Most emails one run sends: today's new leads plus a backlog of unsent rows.
+const MAX_EMAILS_PER_RUN = 20;
+
 const STATE_NAMES = {
   AL: 'Alabama', AZ: 'Arizona', AR: 'Arkansas', CA: 'California', CO: 'Colorado',
   CT: 'Connecticut', DE: 'Delaware', DC: 'Washington, D.C.', FL: 'Florida', GA: 'Georgia',
@@ -97,6 +100,31 @@ function sendEmails(leads, template, blocklist, mailer, options) {
     sent.push(record);
   }
   return {sent, blocked, undeliverable};
+}
+
+/**
+ * Email pending leads, marking each row as soon as its email goes out. freshLeads fill the
+ * slots. Returns how many were sent. services: see liveServices_ in main.js.
+ */
+function sendPending_(services, freshLeads) {
+  const spreadsheet = services.spreadsheet;
+  if (!outreachEnabled(spreadsheet)) {
+    console.log('kill switch is not "yes": no emails sent');
+    return 0;
+  }
+  checkBounces_(services);  // catches the last run's bounces
+  const result = sendEmails(pendingLeads(loadLeads(spreadsheet), freshLeads), loadTemplate(spreadsheet),
+                            loadBlocklist(spreadsheet), services.sendMail, {
+    now: services.now,
+    maxEmails: MAX_EMAILS_PER_RUN,
+    onSent: sent => markEmailed(spreadsheet, sent.contractor_id, sent.emailed_at, sent.thread_id),
+    mailServer: domain => hasMailServer(services.fetch, domain),
+    onUndeliverable: id => updateLead(spreadsheet, id, {email_success: 'no'}),
+  });
+  console.log(`sent ${result.sent.length} emails` +
+              (result.blocked.length ? `; blocklisted, not sent: ${result.blocked.join(', ')}` : '') +
+              (result.undeliverable.length ? `; no mail server, not sent: ${result.undeliverable.join(', ')}` : ''));
+  return result.sent.length;
 }
 
 function blockedLead_(lead, blocklist) {
