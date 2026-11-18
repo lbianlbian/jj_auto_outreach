@@ -27,7 +27,35 @@ const TEMPLATE_SLOTS = {
   company: lead => lead.name || 'your company',
   city: lead => (lead.city ? titleCase_(lead.city) : 'your area'),  // the contractor's address
   project_type: lead => lead.project_type || 'electrical',
+  // "pulled {a_project_type} permit": the most fixture-relevant job in the search window.
+  a_project_type: lead => aProjectType_(lead),
 };
+
+// Permit tags in order of how strongly they suggest buying decorative fixtures, each with the
+// phrase {a_project_type} writes. The article is spelled out because "an ADU" starts with a
+// vowel sound but a consonant letter. Electricians always have the `electrical` tag.
+const PROJECT_PHRASES = [
+  ['kitchen', 'a kitchen remodel'],
+  ['bathroom', 'a bathroom remodel'],
+  ['adu', 'an ADU'],
+  ['addition', 'an addition'],
+  ['new_construction', 'a new construction'],
+  ['remodel', 'a remodel'],
+  ['electrical', 'an electrical'],
+];
+// Any other tag, or a lead from an earlier run with no Shovels record attached.
+const PROJECT_PHRASE_FALLBACK = 'a building';
+
+/**
+ * The first PROJECT_PHRASES tag in the lead's tag_tally. On a contractor search, tag_tally
+ * counts only the permits in the searched window (one day), so the phrase matches a permit
+ * the contractor actually just pulled.
+ */
+function aProjectType_(lead) {
+  const tally = (lead.contractor && lead.contractor.tag_tally) || {};
+  const match = PROJECT_PHRASES.filter(([tag]) => Number(tally[tag]) > 0)[0];
+  return match ? match[1] : PROJECT_PHRASE_FALLBACK;
+}
 
 /** Throw if the template still has [placeholders] to fill in or names a slot that doesn't exist. */
 function checkTemplate(template) {

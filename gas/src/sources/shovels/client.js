@@ -54,20 +54,20 @@ class ShovelsClient {
 
   /**
    * One page of contractors with a matching permit filed in [from, to]: {items, nextCursor}.
+   * `filters` are extra query params (e.g. contractor_classification_derived, permit_tags,
+   * property_type; see searchFilters() in leads.js). The API silently ignores unknown
+   * params and still bills, so their names must be exact.
    * Results are sorted by contractor id, and each contractor appears once however many
    * permits it filed. Every item returned costs 1 credit.
    */
-  searchContractorsPage(geoId, from, to, size, cursor) {
+  searchContractorsPage(geoId, from, to, size, cursor, filters) {
     if (!(size >= 1)) throw new Error(`page size must be at least 1, got ${size}`);
-    const params = {
+    const params = Object.assign({}, filters || {}, {
       geo_id: geoId,
       permit_from: from,
       permit_to: to,
-      permit_tags: ['electrical'],
-      // The API silently ignores unknown params, so this name must stay exact.
-      contractor_classification_derived: ['electrical'],
       size: size,
-    };
+    });
     if (cursor) params.cursor = cursor;
     const body = this.get_('/contractors/search', params);
     return {items: body.items || [], nextCursor: body.next_cursor || null};

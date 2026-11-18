@@ -171,7 +171,7 @@ test('two runs through the Sheet: the leads tab stops repeat contacts', () => {
     const searchLog = gas.loadSearchLog(ss);
     const {leads} = gas.fetchLeads(new gas.ShovelsClient('k', api.fetch), ['CA'], {
       today: '2026-10-21', blocklist: gas.loadBlocklist(ss), knownLeads: gas.loadLeads(ss),
-      searchLog, targetLeads: 3,
+      searchLog, targetLeads: 3, searches: [gas.LEAD_SEARCHES.find(search => search.name === 'electrician')],
     });
     gas.appendLeads(ss, leads);
     gas.saveSearchLog(ss, searchLog);

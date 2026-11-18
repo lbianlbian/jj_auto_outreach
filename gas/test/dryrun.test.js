@@ -54,7 +54,8 @@ test('the source Sheet is only read: rows and kill switch unchanged, the copy pr
 
 test('a run that would fail is reported, not thrown, with what it did before failing', () => {
   const gas = loadGas();
-  const ss = gas.setupSheets(new FakeSpreadsheetApp(), new FakeProperties()).spreadsheet;  // template has [placeholders]
+  const ss = gas.setupSheets(new FakeSpreadsheetApp(), new FakeProperties()).spreadsheet;
+  ss.getSheetByName('template').getRange(2, 1, 1, 2).setValues([['Hi {state}', 'From [your name]']]);
   const report = gas.runDry_(gas.DRY_RUN_ENTRIES.dailyRun, ss, clock);
   assert.match(report.error, /Fill in \[your name\]/);
   assert.equal(report.emails.length, 0);

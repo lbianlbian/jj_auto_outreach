@@ -13,11 +13,29 @@
 const FAKE_CONTRACTOR_KINDS = [
   {label: 'small shop doing remodels', make: n => ({
     business_name: `FAKE BRIGHT SPARK ELECTRIC ${n}`, primary_email: `office@fake-brightspark-${n}.example`,
-    permit_count: 40, tag_tally: {electrical: 12, remodel: 6, lighting: 2}})},
+    permit_count: 40, tag_tally: {electrical: 12, remodel: 6, kitchen: 2}})},
+  {label: 'residential remodeler (GC search)', make: n => ({
+    business_name: `FAKE HOMETOWN REMODELING ${n}`, primary_email: `owner@fake-hometown-${n}.example`,
+    classification_derived: ['general_building_contractor'], permit_count: 35,
+    tag_tally: {remodel: 9, kitchen: 4, bathroom: 3}})},
   {label: 'new-construction electrician', make: n => ({
     business_name: `FAKE NEWBUILD WIRING ${n} LLC`, primary_email: `jobs@fake-newbuild-${n}.example`,
     permit_count: 120, tag_tally: {electrical: 30, new_construction: 14}})},
-  {label: 'fire sprinkler company (passes the filters today)', make: n => ({
+  {label: 'sign company (excluded industry code)', make: n => ({
+    business_name: `FAKE BRIGHT SIGNS ${n} INC`, primary_email: `signs@fake-brightsigns-${n}.example`,
+    permit_count: 90, naics: '339950', sic: '3993', tag_tally: {electrical: 40}})},
+  {label: 'ADU builder (GC search)', make: n => ({
+    business_name: `FAKE BACKYARD ADU BUILDERS ${n}`, primary_email: `build@fake-backyardadu-${n}.example`,
+    classification_derived: ['general_building_contractor'], permit_count: 22,
+    tag_tally: {adu: 5, new_construction: 5, addition: 2}})},
+  {label: 'GC that also roofs (excluded by Shovels, never returned)', make: n => ({
+    business_name: `FAKE ROOF AND BUILD ${n}`, primary_email: `info@fake-roofbuild-${n}.example`,
+    classification_derived: ['general_building_contractor', 'roofing'], permit_count: 50, tag_tally: {roofing: 20}})},
+  {label: 'commercial builder (GC search, excluded industry code)', make: n => ({
+    business_name: `FAKE TOWER BUILDERS ${n}`, primary_email: `bids@fake-tower-${n}.example`,
+    classification_derived: ['general_building_contractor'], naics: '236220', permit_count: 300,
+    tag_tally: {new_construction: 40}})},
+  {label: 'fire sprinkler company (still passes: tag excludes drop permits, not contractors)', make: n => ({
     business_name: `FAKE FIRE SPRINKLER CO ${n}`, primary_email: `service@fake-sprinkler-${n}.example`,
     permit_count: 60, tag_tally: {electrical: 5, fire_sprinkler: 20}})},
   {label: 'permit-service email (blocklisted domain)', make: n => ({
@@ -39,7 +57,7 @@ const FAKE_CONTRACTOR_KINDS = [
 
 // Fake contractors per state per day, and how many days behind "today" the newest fake permits are
 // (real Shovels data runs ~9 days late; see docs/ingestion.md).
-const FAKE_CONTRACTORS_PER_DAY = 3;
+const FAKE_CONTRACTORS_PER_DAY = 5;
 const FAKE_DATA_LAG_DAYS = 9;
 
 /**
@@ -109,9 +127,14 @@ function fakeShovels_(world, path, params) {
   }
   if (path === '/contractors/search') {
     const size = Number(params.size);
+    // Classifications combine with AND and "-" excludes, as on the real API. Tag and property
+    // filters apply to permits, which the fake doesn't model, so they pass everything.
+    const wanted = [].concat(params.contractor_classification_derived || []);
+    const matches = c => wanted.every(w => (w.charAt(0) === '-' ? c.classification_derived.indexOf(w.slice(1)) === -1
+                                                                : c.classification_derived.indexOf(w) !== -1));
     const all = [];
     for (let day = params.permit_from; day <= params.permit_to; day = addDays(day, 1)) {
-      all.push(...world.contractorsOn(params.geo_id, day));
+      all.push(...world.contractorsOn(params.geo_id, day).filter(matches));
     }
     const rest = all.sort((a, b) => (a.id < b.id ? -1 : 1)).filter(c => c.id > (params.cursor || ''));
     const page = rest.slice(0, size);

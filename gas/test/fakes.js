@@ -122,7 +122,8 @@ class FakeProperties {
   setProperty(key, value) { this.values[key] = String(value); return this; }
 }
 
-const LIST_PARAMS = ['permit_tags', 'contractor_classification_derived'];
+const LIST_PARAMS = ['permit_tags', 'contractor_classification_derived', 'property_type'];
+const GC = 'general_building_contractor';
 
 function contractor(i, overrides = {}) {
   return {id: `C${String(i).padStart(2, '0')}`, business_name: `Shop ${i}`, primary_email: `x${i}@shop${i}.com`,
@@ -147,6 +148,13 @@ class FakeShovels {
       contractor(31, {address: {state: 'HI'}}),  // works in CA, based in Hawaii
       ...Array.from({length: 23}, (_, k) => contractor(k + 7)),
       contractor(90, {business_name: 'Cool Air HVAC', classification_derived: ['hvac']}),
+      // GCs, in no day's permits until a test adds them.
+      contractor(40, {business_name: 'Home Remodel Co', classification_derived: [GC]}),
+      contractor(41, {business_name: 'Builds And Wires', classification_derived: [GC, 'electrical']}),
+      contractor(42, {business_name: 'Roof And Build', classification_derived: [GC, 'roofing']}),
+      contractor(43, {business_name: 'Custom Homes', classification_derived: [GC]}),
+      contractor(44, {business_name: 'Tower Builders', classification_derived: [GC], naics: '236220'}),
+      contractor(45, {business_name: 'Cozy ADUs', classification_derived: [GC]}),
     ].forEach(c => { this.contractors[c.id] = c; });
     this.permits = {};  // {geo: {day: [contractor ids]}}
     this.addPermits('CA', '2026-10-12', [20, 21]);  // newest day: partial, must be skipped
@@ -202,9 +210,12 @@ class FakeShovels {
     }
     const size = Number(params.size);
     if (!(size >= 1)) return {status: 422, headers: {}, body: '{"detail":"size must be >= 1"}'};
+    // Classifications combine with AND; a "-" value excludes. Tag and property filters apply
+    // to permits, which the fake doesn't model, so it only checks they're sent (see the tests).
     const wanted = params.contractor_classification_derived || [];
+    const matches = (classes, w) => (w.startsWith('-') ? !classes.includes(w.slice(1)) : classes.includes(w));
     let ids = [...new Set(this.inWindow(params.geo_id, params.permit_from, params.permit_to))]
-      .filter(cid => wanted.every(w => this.contractors[cid].classification_derived.includes(w)))
+      .filter(cid => wanted.every(w => matches(this.contractors[cid].classification_derived, w)))
       .sort();
     ids = ids.filter(cid => cid > (params.cursor || ''));
     const page = ids.slice(0, Math.max(size, this.minPage));
@@ -217,6 +228,12 @@ class FakeShovels {
   /** [geo, day] of each paid search request, in order. */
   searched() {
     return this.calls.filter(c => c.path === '/contractors/search').map(c => [c.params.geo_id, c.params.permit_from]);
+  }
+
+  /** "electrician" or "gc" for each search request, from its classification param. */
+  searchKinds() {
+    return this.calls.filter(c => c.path === '/contractors/search')
+      .map(c => (c.params.contractor_classification_derived.includes(GC) ? 'gc' : 'electrician'));
   }
 }
 

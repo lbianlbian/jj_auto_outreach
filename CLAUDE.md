@@ -27,7 +27,7 @@ fixtures replies. It doesn't try to cover every contractor.
 
 | Stage | State | Where |
 |---|---|---|
-| Ingestion | Done (Apps Script). Runs inside `dailyRun()` behind the credit guard |  `gas/src/sources/shovels/`, writes the leads tab. See `docs/ingestion.md` |
+| Ingestion | Done (Apps Script). Runs inside `dailyRun()` behind the credit guard. Targeting filters (JJ-34): two searches (electricians and GCs, 10 leads in any mix, GCs first on even days), residential, tag/trade/industry-code excludes; tested offline, not yet pushed or run live |  `gas/src/sources/shovels/`, writes the leads tab. See `docs/ingestion.md` |
 | Send email | Done (JJ-12). Real contractors emailed | `gas/src/outreach/send.js`. Fills the hand-edited `template` tab and sends via `GmailApp`; runs only when the kill switch says "yes" |
 | Bounces | Done (JJ-23). Verified live: `checkBounces()` marked the first real bounce | `gas/src/outreach/bounces.js`. Skips domains with no MX record before sending; `checkBounces()` matches Gmail bounce notices to leads. Both write `email_success` |
 | Tracking | Sent emails: done (JJ-12 writes `emailed_at`, `thread_id`). Kill switch: done (JJ-13). Reply tracking: Backlog (JJ-14), since no one has replied yet; the user watches the inbox by hand | Apps Script + Google Sheet |
@@ -35,8 +35,10 @@ fixtures replies. It doesn't try to cover every contractor.
 | Scheduling | Done (JJ-20). Triggers installed; verified live: a run completed and logged | `gas/src/daily.js`. `dailyRun()` = kill switch → bounce check → credit guard → ingestion → send → `run_log` row. `setupTriggers()` schedules it weekdays 7–8am PT |
 | Dry run | Built, tested offline; not yet pushed or run in GAS | `gas/src/dryrun/`. `dryRun()` in GAS, `npm run dry-run` locally. Fakes sit at the `services` boundary (see Hard rules) |
 
-**Next step:** none picked; `docs/plan.md` has nothing in Next Up. Ask the user which
-Backlog item comes next. Reply tracking (JJ-14) and follow-ups (JJ-16) wait until someone replies. The kill switch (JJ-13) gates every entry point: `dailyRun()` makes no
+**Next step:** finish JJ-34: the code is done and tested offline; it needs `clasp push`, the
+user's template change for GCs, and one approved live run after credits refill
+(2026-11-20). The rules are in `README.md` "Targeting", the evidence in `docs/responders.md`.
+Then JJ-26 and JJ-25 (research). Reply tracking (JJ-14) and follow-ups (JJ-16) wait until someone replies. The kill switch (JJ-13) gates every entry point: `dailyRun()` makes no
 Shovels calls unless it says "yes", and sending checks it too. Linear has the current task
 list and order. See Linear below.
 
@@ -93,8 +95,8 @@ repo.
   a live run). It's in git history; `docs/ingestion.md` holds what it taught us. Don't
   bring it back.
 - **Emails come from a template, not an LLM.** The Shovels data has no bio or free text
-  worth personalizing from. Website, LinkedIn, revenue, employee count and industry are
-  always null. The template takes slots (contact name, company, city, and project type
+  worth personalizing from. Website, LinkedIn, revenue, employee count and industry codes are
+  usually null (filled for some contractors; see `docs/responders.md`). The template takes slots (contact name, company, city, and project type
   from `tag_tally`). The user writes and edits the template by hand. Don't build LLM
   generation of templates or emails.
 - **A planned later LLM use is lead filtering.** It would be a yes/no "does this company
@@ -176,7 +178,8 @@ before relying on the names above.
 
 ## Layout
 ```
-docs/                 proposal.md, technical_spec.md, plan.md, sheets.md, ingestion.md (see Ownership of docs)
+docs/                 proposal.md, technical_spec.md, plan.md, sheets.md, ingestion.md (see Ownership of docs),
+                      responders.md (Shovels data on who responded to outreach, and what it says about targeting)
 shovels_executable/   vendored Shovels CLI binary (gitignored) and its README
 gas/                  Apps Script project: clasp root, package.json (npm test)
   src/                pushed by clasp

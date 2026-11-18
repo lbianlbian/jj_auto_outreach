@@ -102,6 +102,7 @@ function ingest_(spreadsheet, client, today, states = US_STATES) {
       blocklist: loadBlocklist(spreadsheet),
       knownLeads: loadLeads(spreadsheet),
       searchLog: searchLog,
+      // Electricians and GCs in any mix; searchesForDay() alternates which goes first.
       targetLeads: 10,
       maxContractors: RUN_CREDIT_CAP,
     }).leads;

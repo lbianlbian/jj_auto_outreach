@@ -56,6 +56,8 @@ const SCHEMA = {
   },
   // The pitch email, hand-edited: subject in A2, body in B2. Slots in {braces} are filled per
   // lead (see TEMPLATE_SLOTS in send.js); anything still in [square brackets] blocks sending.
+  // The seed body is the user's docs/template.txt (2026-11-17); keep the two in step. It's
+  // written only when the tab is first created, so an existing Sheet's template changes by hand.
   template: {
     columns: ['subject', 'body'],
     seed: {
@@ -63,21 +65,30 @@ const SCHEMA = {
       body: [[
         'Hi there,',
         '',
-        "I'm [your name], a student helping out with my dad's small online lighting store, JoJoSpring. " +
-          'I saw you recently pulled an electrical permit in {state}, so I wanted to reach out.',
+        "I'm Wesley, a student helping out with my dad's small online lighting store, JoJoSpring. " +
+          'I saw you recently pulled {a_project_type} permit in {state}, so I wanted to reach out.',
         '',
-        'We sell quality light fixtures at low prices. You can see everything at https://www.jojospring.com.',
+        'We sell quality light fixtures at lower prices than Home Depot or Wayfair and offer free shipping. ' +
+          'You can see everything at https://www.jojospring.com.',
+        '',
+        'Popular with contractors right now:',
+        '1. Lynn Antique Glass Pendant Lights ' +
+          '(https://jojospring.com/index.php?main_page=product_info&cPath=2_8&products_id=2131)',
+        '2. Daniela 5-light Antique Black Metal and Natural Wood Glass Chandelier ' +
+          '(https://jojospring.com/index.php?main_page=product_info&cPath=2_8&products_id=2394)',
+        '3. Mariana Cognac Glass Cluster Pendant in Antique Black Finish ' +
+          '(https://jojospring.com/index.php?main_page=product_info&cPath=2_8&products_id=2132)',
         '',
         "If you need several fixtures for a job, just reply to this email and we'll put together a " +
-          'discount on the bundle.',
+          'discounted bundle for you.',
         '',
         'Wishing you the best with the project, and we hope we can help!',
         '',
-        '[your name]',
-        'JoJoSpring · https://www.jojospring.com',
-        '[mailing address]',
+        'Wesley',
+        '3018 Durfee Ave, Ste C',
+        'El Monte, CA 91732',
         '',
-        `P.S. If you'd rather not hear from us, reply "no thanks" and we won't email again.`,
+        `P.S. If you don't want to hear from me, reply "no thanks" and I won't email again.`,
       ].join('\n')],
     },
   },

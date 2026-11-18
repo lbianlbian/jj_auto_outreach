@@ -1,8 +1,9 @@
 # Ingestion: Shovels.ai → contractor leads
 
 Ingestion (`ingest_()` in `gas/src/daily.js`, run by `dailyRun()`) is the first step of the outreach pipeline. It
-searches the Shovels API for electrical contractors who filed a permit on a recent day,
-filters them and writes at least 10 new leads per run to the leads tab of the Sheet. Each
+searches the Shovels API for residential electricians and general contractors (GCs) who
+filed a permit on a recent day, filters them and writes at least 10 new leads, in any mix
+of the two, per run to the leads tab of the Sheet (see [Two searches](#two-searches-electricians-and-gcs)). Each
 lead in memory has a name, primary email, phone, city, state, permit day, project type
 (from `tag_tally`), zip code and the full contractor record. Only `contractor_id, name,
 zip_code, email` are written to the Sheet (sending adds `emailed_at` and `thread_id`); the
@@ -93,7 +94,7 @@ Everything below was confirmed with live calls in October 2026, except where mar
 | `GET /contractors/search` | **Used.** Contractors directly (see [how a run works](#how-a-run-works-contractor-search)) | Takes the same `geo_id` / date / `permit_tags` filters. Returns full contractor records, sorted by `id` |
 | `GET /contractors/{id}/permits` | One contractor's permits | Not used yet |
 | `GET /contractors/{id}/employees` | Individual people | Each has `business_email` and `email`; the second is personal, so skip it for cold outreach |
-| `GET /list/tags` | Valid tag IDs | `electrical` is valid |
+| `GET /list/tags` | Valid tag IDs | `electrical` is valid. Credit-exempt: on 2026-11-16 a `size=1` call returned 1 tag with no `X-Credits-*` headers, and `/usage` was unchanged. Paginated (`size` ≤ 100, `next_cursor`). The docs' example tag IDs disagree with each other (`kitchen` vs `kitchen_remodel`), so take IDs from this endpoint, not from the docs. The full list (24 tags, one page, still free) is in [Permit tags](#permit-tags) |
 | `GET /meta/coverage` | **Used.** Free permit count per state and day (see [the completeness check](#free-completeness-check)) | Credit-exempt |
 | `GET /usage` | Credit balance | Free |
 
@@ -112,13 +113,59 @@ Everything below was confirmed with live calls in October 2026, except where mar
   2026-10-26 the JS client's request matched `shovels.exe contractors search --dry-run`
   exactly.
 
+### Permit tags
+All 24 tag IDs from `GET /list/tags` (fetched 2026-11-16, credit-exempt). `--tags` uses
+AND logic, and a `-` prefix excludes a tag.
+
+`addition`, `adu`, `bathroom`, `battery`, `demolition`, `electric_meter`, `electrical`,
+`ev_charger`, `fire_sprinkler`, `gas`, `generator`, `grading`, `heat_pump`, `hvac`,
+`kitchen`, `new_construction`, `plumbing`, `pool_and_hot_tub`, `remodel`, `roofing`,
+`solar`, `telecom`, `water_heater`, `window_door`
+
+There is no lighting, fixture, fire-alarm or low-voltage tag. To find lighting work, use
+`--query` (a substring of the permit description). `fire_sprinkler` and `telecom` are
+useful excludes.
+
 ### Contractor fields that matter
 - **`primary_email`:** a single string. This is the one we use.
 - **`email`:** a **comma-separated string** of every address on record. It's noisy and
   includes permit-service and placeholder addresses.
 - **Other contact fields:** `primary_phone`, `website`, `business_name`, `name` and `dba`.
 - **Size signals:** `permit_count` (lifetime) and `total_job_value` (in cents).
-  `employee_count` and `revenue` were always null.
+  `employee_count` and `revenue` were null in the early runs, but on 2026-11-17 one
+  contractor (a sign company) had `revenue`, `employee_count`, `website`, `rating`,
+  `review_count`, `sic` and `naics` filled. They're sparse, not always null. See
+  `docs/responders.md`.
+- **`GET /contractors?id=` returns lifetime `tag_tally` / `status_tally`.** Contractor
+  search returns counts for the search window only.
+
+### Industry codes (`naics` and `sic`)
+Both fields say what industry a business is in, as assigned by business-data vendors
+(not by permits or licenses). They're usually null; when filled they're a free filter on
+records we already paid for. **Shovels can't filter on them server-side**, so they can only
+reject or rank after the fact. They can be wrong, since vendors assign them loosely.
+
+- **NAICS** (North American Industry Classification System, since 1997) is the current
+  standard: 6 digits, read left to right from broad to narrow. `23` is construction,
+  `238` is specialty trade contractors, `238210` is electrical contractors.
+- **SIC** (Standard Industrial Classification) is the older 4-digit system it replaced.
+  Data vendors still carry it, so a record may have one, both or neither.
+
+Codes relevant to targeting (from the standard code lists, not seen in our data unless noted):
+
+| NAICS | SIC | Meaning | Use |
+|---|---|---|---|
+| 238210 | 1731 | Electrical contractors and other wiring installation | Keep. Also covers low-voltage and alarm *installers*, so it doesn't rule those out |
+| 236118 | 1521 | Residential remodelers / single-family general contractors | Keep (GC search) |
+| 236115, 236117 | 1521, 1531 | New single-family housing; for-sale home builders | Keep (GC search) |
+| 236116 | 1522 | New multifamily housing | Probably keep |
+| 236220 | 1542 | Commercial and institutional building | Reject or rank low |
+| 236210 | 1541 | Industrial building | Reject |
+| 237130 | 1623 | Power and communication line construction | Reject |
+| 339950 | 3993 | Signs (seen: Signcraft) | Reject |
+| 561621 | 7382 | Security systems services (alarms, monitoring) | Reject |
+| 238220 | 1711 | Plumbing, heating and air conditioning | Reject on the electrician search |
+| 423610 | 5063 | Electrical equipment wholesalers (distributors) | Reject: competitors, not buyers |
 - **`classification_derived`:** for example `["electrical", "general_building_contractor"]`.
   It's often null.
 
@@ -233,11 +280,54 @@ instead of per permit removes the cost of repeat permits, and the `/contractors`
 goes away.
 
 ```
-contractors/search (state, one day, permit_tags=electrical,       1 credit per contractor
-                    contractor_classification_derived=electrical)
-  -> filter: leads tab, blocklist, permit_count, email             free
+for each (state, day) not searched yet, until the run has 10 leads in any mix:
+  contractors/search, first search  (GCs on even days, electricians on odd)   1 credit per contractor
+  contractors/search, second search (the other one)                           1 credit per contractor
+    -> filter: leads tab, blocklist, permit_count, industry code, email   free
   -> optional: /contractors/{id}/permits size=1                    +1 credit per lead, gives a recent job to mention
 ```
+
+### Two searches: electricians and GCs
+Added 2026-11-17 (JJ-34). The rules come from `README.md` "Targeting"; the evidence from
+real responses is in `docs/responders.md`. `LEAD_SEARCHES`, `searchFilters()` and
+`searchesForDay()` in `leads.js` hold them.
+
+| | Electrician search | GC search |
+|---|---|---|
+| `contractor_classification_derived` | `electrical` | `general_building_contractor`, `-electrical` (so the two never overlap) |
+| Required permit tag | `electrical` (as before) | none: a GC's electrical work is often on the subcontractor's permit |
+| Goes first | on odd days of the month | on even days of the month |
+
+Both searches also send, so Shovels filters for free:
+- **Classification excludes:** `-general_engineering_contractor`, `-roofing`,
+  `-concrete_and_paving`, `-landscaping_and_outdoor_work`. These drop a contractor with that
+  trade *anywhere* in its list, so a GC who also roofs is gone. Loosen the list if runs start
+  walking back many days.
+- **Tag excludes:** `-solar`, `-battery`, `-ev_charger`, `-generator`, `-fire_sprinkler`,
+  `-telecom`. These drop *permits*, not contractors: a solar shop with one plain electrical
+  permit that day still comes back. Tags like `electric_meter`, `plumbing` and `hvac` are
+  deliberately not excluded, since remodels, additions and new homes carry them too. Two of
+  Jarrett Electric's three recent permits were `electric_meter` jobs.
+- **`property_type=residential`.** This matches contractors with at least one residential
+  permit in the window, not only residential contractors.
+
+The exact parameters were checked with `shovels.exe contractors search --dry-run` on
+2026-11-17 and are pinned in `test/ingestion.test.js` ("both searches send their filters exactly").
+
+**How the two share a run.** A run wants 10 leads in any mix. Each (state, day) not searched
+yet gets both searches in order, each page asking only for the leads the run still needs,
+until the run has 10. Only the run's last day can be left partly unread, as before, so the
+search_log tab is unchanged. Both draw on the same `RUN_CREDIT_CAP`. Each lead carries
+`search` ("electrician" or "gc") in memory; the leads tab doesn't store it.
+
+The first search each day gets first pick, so in a busy state it could fill all 10 alone.
+Alternating the order by day (user's choice, 2026-11-17) keeps either kind from crowding out
+the other over a week, even if one run is lopsided. An earlier version gave each search its
+own target of 5; the shared target is simpler and never skips a day for one search.
+
+**Not measured yet:** how many contractors the GC search returns per day, and how often its
+classification is null (nulls are dropped). The first live run will show it in the run's log
+lines (`CA 2026-11-07 gc: 4 contractors, 2 of 5 leads so far`).
 
 **Measured runs:**
 
@@ -280,13 +370,14 @@ Following the [core tenet](#core-tenet-a-steady-supply-not-full-coverage), **eac
 
 1. Picks states least recently searched first (`searched_at` in the search_log tab). A
    state with no data still gets a row with blank start/end and `searched_at` stamped,
-   so it rotates to the back. With 10 leads a run, one state usually fills the run,
-   which also spreads leads across the country.
+   so it rotates to the back. With 10 leads a run, one state usually filled the run with
+   the single search, which also spreads leads across the country. With the narrower
+   residential filters this is unmeasured.
 2. Uses free coverage calls to find the state's newest day with any permits, within the
    lookback (`days`, default 30). That day is treated as partial and skipped.
 3. Walks backward from the day before, skipping days already searched for that state.
-4. Pages through each day with `next_cursor` until at least 10 leads pass the filters,
-   marking the day searched. Days older than the lookback are dropped from the search log.
+4. Pages through each day with `next_cursor`, running both searches in that day's order
+   until the run has 10 leads, marking the day searched. Days older than the lookback are dropped from the search log.
 
 - **Empty days cost nothing.** A response with no records is free, so days Shovels hasn't
   ingested yet are just stepped past. That makes the irregular ~9-day lag harmless. A
@@ -349,7 +440,12 @@ that limit. Call latency from Apps Script hasn't been measured.
 What `skipReason()` in `filters.js` does:
 - **Unshippable state:** the contractor's `address.state` is in `UNSHIPPABLE_STATES`
   (see [No Alaska or Hawaii](#no-alaska-or-hawaii)).
-- **`permit_count` > 500 is too large.** Tesla has about 75k, NRG Clean Power about 4.4k.
+- **`permit_count` of 500 or more is too large** (was "over 500" until 2026-11-17). Tesla has about 75k, NRG Clean Power about 4.4k.
+- **Excluded industry:** the contractor's `naics` or `sic` is one of signs, security and
+  alarms, commercial building, industrial building, power and communication lines, or
+  electrical wholesalers (`EXCLUDED_NAICS` / `EXCLUDED_SIC` in `filters.js`; codes in
+  [Industry codes](#industry-codes-naics-and-sic)). Null codes pass. A comma-separated value
+  is split, just in case.
   Small shops have 1–200.
 - **Blocklisted company:** whole-word matching on `business_name`, `name` and `dba`
   against the blocklist tab's `company` column. Matching ignores case and punctuation, so
@@ -382,7 +478,9 @@ Deliberately **not** filtered:
 - **Fire-alarm and fire-protection companies.** They show up under the electrical
   classification. Telling them apart from electricians would take an LLM step (JJ-17),
   and a name filter on "fire" could drop a legitimate electrician with "fire" in the
-  company name. They're accepted as leads.
+  company name. They're accepted as leads. The `-fire_sprinkler` tag exclude only drops
+  their sprinkler permits, and the security/alarm industry code catches them only when
+  `naics`/`sic` is filled in.
 - **Role addresses** like `accounting@` or `licensing@`. They're less likely to reach the
   owner, but they're real company inboxes, so they're accepted too.
 
@@ -395,6 +493,9 @@ Deliberately **not** filtered:
 - [ ] Re-measure the data lag on other days, to confirm older days really don't change.
       The coverage check makes this free: log each state's daily `permits_total` per run.
 - [ ] Keep growing the blocklist tab as bad leads appear.
+- [ ] After the first live run of the two searches: GC contractors per day, how many
+      `classification_derived` nulls the GC filter drops, and whether the classification
+      excludes need loosening.
 - [ ] Log each skipped contractor (id, name, reason), not just counts, to make runs easier to audit.
 
 ## Testing

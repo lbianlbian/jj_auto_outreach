@@ -28,6 +28,28 @@ Switching infrastructure from original render.com plan to google apps script nat
 - GAS approach makes simplicity and usability by non technical business owner easier
 - for course, practicing google apps script development with agentic tools when i previously never used agentic tools with GAS is good
 
+## Targeting
+claude --resume e3a804e0-bb3d-4131-a523-7bc13bc0cc90
+- type of contractor 
+    - classification_derived=electrical or general_building_contractor
+        - or's are done through first electrical and then general_building_contractor + -electrical
+    - exclude general_engineering_contractor, roofing, concrete_and_paving and landscaping_and_outdoor_work
+    - also exclude by (naics / sic) code when those attributes are non null
+        - signs: 339950 / 3993
+        - security and alarms: 561621 / 7382
+        - commercial buildling: 236220 / 1542
+        - industrial building: 236210 / 1541
+        - power and communication lines: 237130 / 1623
+        - electrical wholesalers: 423610 / 5063
+    - can't have over 500 permits because then they're too large scale
+- type of home 
+    - property_type = residential
+    - not too expensive, consider using contractor's avg_job_value < x to determine or search up property value but requires 1 extra credit
+- type of job 
+    - permit tag is not solar, battery, ev_charger, generator, fire_sprinkler, telecom
+- addl context in permit descriptions sent to LLM
+    - consider for future
+
 #### Tasks/progress are tracked in Linear and Linear should be updated as things are done or new things to do are added. 
 
 See dashboard: https://script.google.com/macros/s/AKfycbzttfPqnnnXb2tb15BGEfOeQr5R-T-1cA0y2Hi4Shh3xWs1zCyYabB_i7jF5Lmn6-Pg/exec?key={secret key here}

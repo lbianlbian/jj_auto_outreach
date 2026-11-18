@@ -37,14 +37,41 @@ test('missing fields fall back to generic wording', () => {
   assert.equal(email.body, 'Hi your company in your area, electrical job in your area.');
 });
 
-test('the seeded template mentions the permit state and leaves name and address to fill in', () => {
+test('the seeded template is docs/template.txt, ready to send', () => {
   const {gas, ss} = fresh();
   const template = gas.loadTemplate(ss);
+  const doc = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'docs', 'template.txt'), 'utf8');
+  assert.equal(template.body, doc.replace(/\r\n/g, '\n').trim());
   assert.match(template.subject, /\{state\}/);
-  assert.match(template.body, /electrical permit in \{state\}/);
-  assert.match(template.body, /https:\/\/www\.jojospring\.com/);
+  assert.match(template.body, /pulled \{a_project_type\} permit in \{state\}/);
   assert.match(template.body, /no thanks/);  // CAN-SPAM opt-out
-  assert.throws(() => gas.checkTemplate(template), /Fill in \[your name\], \[mailing address\]/);
+  assert.match(template.body, /El Monte, CA 91732/);  // CAN-SPAM postal address
+  gas.checkTemplate(template);  // no [placeholders] or unknown slots
+});
+
+for (const [tally, phrase] of [
+  [{electrical: 3, kitchen: 1, remodel: 2}, 'a kitchen remodel'],  // most relevant wins, not most common
+  [{electrical: 5, bathroom: 1}, 'a bathroom remodel'],
+  [{adu: 1, new_construction: 1}, 'an ADU'],
+  [{electrical: 2, addition: 1}, 'an addition'],
+  [{new_construction: 4, plumbing: 4}, 'a new construction'],
+  [{remodel: 1, hvac: 3}, 'a remodel'],
+  [{electrical: 9, electric_meter: 6}, 'an electrical'],  // Jarrett's meter jobs
+  [{plumbing: 2, hvac: 1}, 'a building'],
+  [{kitchen: 0, electrical: 1}, 'an electrical'],  // a zero count doesn't count
+  [{}, 'a building'],
+]) {
+  test(`{a_project_type}: ${JSON.stringify(tally)} -> ${phrase}`, () => {
+    const {gas} = fresh();
+    const filled = gas.fillTemplate({subject: 's', body: 'pulled {a_project_type} permit'},
+                                    lead('C01', {contractor: {tag_tally: tally}}));
+    assert.equal(filled.body, `pulled ${phrase} permit`);
+  });
+}
+
+test('{a_project_type} falls back for a lead from an earlier run with no Shovels record', () => {
+  const {gas} = fresh();
+  assert.equal(gas.fillTemplate({subject: 's', body: '{a_project_type}'}, lead('C01')).body, 'a building');
 });
 
 test('an unfilled placeholder or unknown slot sends nothing', () => {

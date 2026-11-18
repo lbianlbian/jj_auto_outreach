@@ -54,9 +54,13 @@ test('enough credits: bounces, then ingestion within the cap, then sending, all 
 
 test('a run spends at most RUN_CREDIT_CAP, however few leads it has found', () => {
   const {gas, api, run} = fresh();
-  // 40 permit-service contractors: all billed, none a lead, so only the cap stops the run.
+  // 40 permit-service GCs: all billed, none a lead. The electricians give only 5 of the 10
+  // leads, so the GC search keeps paging and only the cap stops the run.
   const ids = Array.from({length: 40}, (_, k) => 40 + k);
-  ids.forEach(i => { api.contractors[`C${i}`] = contractor(i, {primary_email: `x${i}@ipermitca.com`}); });
+  ids.forEach(i => {
+    api.contractors[`C${i}`] = contractor(i, {primary_email: `x${i}@ipermitca.com`,
+                                              classification_derived: ['general_building_contractor']});
+  });
   api.addPermits('CA', '2026-10-11', ids);
   run();
   assert.equal(api.billed, gas.RUN_CREDIT_CAP);
